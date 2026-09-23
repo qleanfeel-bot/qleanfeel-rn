@@ -1,4 +1,4 @@
-package com.qleanfeel_rn
+package com.qleanfeel.app
 
 import android.app.Application
 import com.facebook.react.PackageList

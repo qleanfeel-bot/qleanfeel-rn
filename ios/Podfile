@@ -14,7 +14,7 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
-target 'qleanfeel_rn' do
+target 'Qleanfeel' do
   config = use_native_modules!
 
   use_react_native!(
