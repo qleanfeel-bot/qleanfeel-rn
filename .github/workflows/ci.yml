@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   verify-android:
-    name: Validate and build Android debug APK
+    name: Validate and build Android APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -54,4 +54,15 @@ jobs:
         with:
           name: qleanfeel-android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Build Android release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Android release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: qleanfeel-android-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
