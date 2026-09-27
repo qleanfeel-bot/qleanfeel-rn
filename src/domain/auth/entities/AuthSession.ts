@@ -11,6 +11,7 @@ export const AUTH_SESSION_STATUSES = {
 export type AuthSessionStatus =
   (typeof AUTH_SESSION_STATUSES)[keyof typeof AUTH_SESSION_STATUSES];
 
+/** Qleanfeel authenticated session state; external provider credentials do not belong here. */
 export interface AuthSession {
   readonly id: AuthSessionId;
   readonly userId: UserId;
