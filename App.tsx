@@ -1,10 +1,22 @@
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { StatusBar, StyleSheet, View } from 'react-native';
+import type { AuthStateController } from './src/application/auth/AuthStateController';
+import { createDevelopmentAuthController } from './src/development/auth/createDevelopmentAuthController';
+import { LoginScreen } from './src/presentation/auth/LoginScreen';
 
-function App() {
+interface AppProps {
+  readonly authController?: AuthStateController;
+}
+
+function App({ authController }: AppProps) {
+  const [controller] = useState(
+    () => authController ?? createDevelopmentAuthController(),
+  );
+
   return (
     <View style={styles.container} testID="qleanfeel-root">
       <StatusBar barStyle="dark-content" />
-      <Text style={styles.title}>Qleanfeel</Text>
+      <LoginScreen controller={controller} />
     </View>
   );
 }
@@ -12,14 +24,7 @@ function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-  },
-  title: {
-    color: '#171717',
-    fontSize: 28,
-    fontWeight: '600',
   },
 });
 
