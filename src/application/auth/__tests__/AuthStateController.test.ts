@@ -2,6 +2,7 @@ import type { User } from '../../../domain/auth/entities/User';
 import type { ProviderCredential } from '../ProviderCredential';
 import type { AuthApi } from '../ports/AuthApi';
 import type { AuthProviderAdapter } from '../ports/AuthProviderAdapter';
+import type { AuthState } from '../AuthState';
 import { AuthStateController } from '../AuthStateController';
 
 const user: User = {
@@ -35,6 +36,67 @@ describe('AuthStateController', () => {
     expect(controller.state).toEqual({ status: 'unknown' });
   });
 
+  it('immediately emits the current state to a new subscriber', () => {
+    const { controller } = createController();
+    const listener = jest.fn();
+
+    controller.subscribe(listener);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ status: 'unknown' });
+  });
+
+  it('notifies on state changes but not repeated equivalent states', async () => {
+    const { controller } = createController();
+    const states: AuthState[] = [];
+    controller.subscribe(state => states.push(state));
+
+    await controller.requestOtp('+10000000000');
+    await controller.requestOtp('+10000000000');
+
+    expect(states.map(state => state.status)).toEqual([
+      'unknown',
+      'authenticating',
+    ]);
+  });
+
+  it('notifies multiple subscribers', () => {
+    const { controller } = createController();
+    const first = jest.fn();
+    const second = jest.fn();
+
+    controller.subscribe(first);
+    controller.subscribe(second);
+    controller.expireSession();
+
+    expect(first).toHaveBeenNthCalledWith(2, { status: 'sessionExpired' });
+    expect(second).toHaveBeenNthCalledWith(2, { status: 'sessionExpired' });
+  });
+
+  it('stops notifying an unsubscribed listener', () => {
+    const { controller } = createController();
+    const listener = jest.fn();
+    const unsubscribe = controller.subscribe(listener);
+
+    unsubscribe();
+    controller.expireSession();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows unsubscribe to be called more than once', () => {
+    const { controller } = createController();
+    const listener = jest.fn();
+    const unsubscribe = controller.subscribe(listener);
+
+    expect(() => {
+      unsubscribe();
+      unsubscribe();
+      controller.expireSession();
+    }).not.toThrow();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it('authenticates through the provider and then the Qleanfeel API', async () => {
     const { controller, provider, api } = createController();
 
@@ -65,6 +127,8 @@ describe('AuthStateController', () => {
 
   it('ignores an authentication result that completes after session expiration', async () => {
     const { controller, api } = createController();
+    const states: AuthState[] = [];
+    controller.subscribe(state => states.push(state));
     let resolveBootstrap: (value: User | PromiseLike<User>) => void = () => {};
     let markBootstrapStarted: () => void = () => {};
     const bootstrapStarted = new Promise<void>(resolve => {
@@ -85,6 +149,11 @@ describe('AuthStateController', () => {
     await authentication;
 
     expect(controller.state).toEqual({ status: 'sessionExpired' });
+    expect(states.map(state => state.status)).toEqual([
+      'unknown',
+      'authenticating',
+      'sessionExpired',
+    ]);
   });
 
   it('maps authentication failures to domain error codes without exposing messages', async () => {
@@ -125,10 +194,13 @@ describe('AuthStateController', () => {
 
   it('does not put a provider credential in AuthState or the Qleanfeel User', async () => {
     const { controller } = createController();
+    const states: AuthState[] = [];
+    controller.subscribe(state => states.push(state));
 
     await controller.verifyOtp('+10000000000', '123456');
 
     expect(controller.state).toEqual({ status: 'authenticated', user });
+    expect(states.every(state => !JSON.stringify(state)?.includes(providerCredential))).toBe(true);
     expect(JSON.stringify(controller.state)).not.toContain(providerCredential);
     expect(JSON.stringify(user)).not.toContain(providerCredential);
     expect(controller.state.status).toBe('authenticated');

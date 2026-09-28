@@ -4,6 +4,36 @@ import type { AuthProviderAdapter } from './ports/AuthProviderAdapter';
 import type { AuthState } from './AuthState';
 
 const initialState: AuthState = { status: 'unknown' };
+type AuthStateListener = (state: AuthState) => void;
+
+function sameUser(left: AuthenticatedState['user'], right: AuthenticatedState['user']): boolean {
+  return (
+    left.id === right.id &&
+    left.status === right.status &&
+    left.createdAt.getTime() === right.createdAt.getTime() &&
+    left.updatedAt.getTime() === right.updatedAt.getTime()
+  );
+}
+
+type AuthenticatedState = Extract<AuthState, { readonly status: 'authenticated' }>;
+
+function sameState(left: AuthState, right: AuthState): boolean {
+  if (left.status !== right.status) {
+    return false;
+  }
+
+  switch (left.status) {
+    case 'unknown':
+    case 'unauthenticated':
+    case 'authenticating':
+    case 'sessionExpired':
+      return true;
+    case 'authenticated':
+      return right.status === 'authenticated' && sameUser(left.user, right.user);
+    case 'error':
+      return right.status === 'error' && left.error.code === right.error.code;
+  }
+}
 
 function toAuthError(error: unknown): AuthError {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
@@ -30,6 +60,7 @@ function toAuthError(error: unknown): AuthError {
 export class AuthStateController {
   private currentState: AuthState = initialState;
   private operationVersion = 0;
+  private readonly listeners = new Set<AuthStateListener>();
 
   constructor(
     private readonly provider: AuthProviderAdapter,
@@ -38,6 +69,15 @@ export class AuthStateController {
 
   get state(): AuthState {
     return this.currentState;
+  }
+
+  subscribe(listener: AuthStateListener): () => void {
+    this.listeners.add(listener);
+    listener(this.currentState);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   async initialize(): Promise<void> {
@@ -144,6 +184,15 @@ export class AuthStateController {
   }
 
   private setState(state: AuthState): void {
+    if (sameState(this.currentState, state)) {
+      return;
+    }
+
     this.currentState = state;
+    for (const listener of [...this.listeners]) {
+      if (this.listeners.has(listener)) {
+        listener(state);
+      }
+    }
   }
 }
