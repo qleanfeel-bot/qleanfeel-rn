@@ -26,6 +26,7 @@ function sameState(left: AuthState, right: AuthState): boolean {
     case 'unknown':
     case 'unauthenticated':
     case 'authenticating':
+    case 'awaitingOtp':
     case 'sessionExpired':
       return true;
     case 'authenticated':
@@ -114,6 +115,9 @@ export class AuthStateController {
 
     try {
       await this.provider.requestOtp(phoneNumber);
+      if (this.isCurrentOperation(operationVersion)) {
+        this.setState({ status: 'awaitingOtp' });
+      }
     } catch (error) {
       if (this.isCurrentOperation(operationVersion)) {
         this.setFailure(error);

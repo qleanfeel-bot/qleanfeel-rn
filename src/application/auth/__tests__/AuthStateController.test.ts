@@ -52,11 +52,14 @@ describe('AuthStateController', () => {
     controller.subscribe(state => states.push(state));
 
     await controller.requestOtp('+10000000000');
-    await controller.requestOtp('+10000000000');
+    controller.expireSession();
+    controller.expireSession();
 
     expect(states.map(state => state.status)).toEqual([
       'unknown',
       'authenticating',
+      'awaitingOtp',
+      'sessionExpired',
     ]);
   });
 
