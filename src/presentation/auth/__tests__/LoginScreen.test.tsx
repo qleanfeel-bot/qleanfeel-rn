@@ -154,6 +154,44 @@ describe('LoginScreen', () => {
     expect(input(renderer, 'otp-input')).toBeTruthy();
   });
 
+  it('shows a safe InvalidCode message and allows verification retry', async () => {
+    const { controller, provider } = createController();
+    provider.verifyOtp
+      .mockRejectedValueOnce({ code: 'InvalidCode', message: 'private invalid-code details' })
+      .mockResolvedValueOnce(secretCredential);
+    const renderer = await renderLogin(controller);
+    await ReactTestRenderer.act(async () => {
+      input(renderer, 'phone-input').props.onChangeText('+15550100');
+    });
+    await ReactTestRenderer.act(async () => {
+      button(renderer, 'request-otp-button').props.onPress();
+    });
+    await ReactTestRenderer.act(async () => {
+      input(renderer, 'otp-input').props.onChangeText('bad-code');
+    });
+    await ReactTestRenderer.act(async () => {
+      button(renderer, 'verify-otp-button').props.onPress();
+    });
+
+    expect(renderer.root.findByProps({ testID: 'auth-error' }).props.children).toBe(
+      'That code is not valid. Check it and try again.',
+    );
+    expect(renderer.root.findByProps({ testID: 'otp-input' }).props.value).toBe('bad-code');
+    expect(button(renderer, 'verify-otp-button').props.disabled).toBe(false);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('private invalid-code details');
+
+    await ReactTestRenderer.act(async () => {
+      input(renderer, 'otp-input').props.onChangeText('123456');
+    });
+    await ReactTestRenderer.act(async () => {
+      button(renderer, 'verify-otp-button').props.onPress();
+    });
+
+    expect(provider.verifyOtp).toHaveBeenNthCalledWith(1, '+15550100', 'bad-code');
+    expect(provider.verifyOtp).toHaveBeenNthCalledWith(2, '+15550100', '123456');
+    expect(renderer.root.findByProps({ testID: 'login-authenticated' })).toBeTruthy();
+  });
+
   it('subscribes to AuthStateController on mount', async () => {
     const { controller } = createController();
     const subscribe = jest.spyOn(controller, 'subscribe');

@@ -110,6 +110,46 @@ describe('AuthStateController', () => {
     expect(controller.state).toEqual({ status: 'authenticated', user });
   });
 
+  it('maps bootstrap API rejection without exposing details or credentials', async () => {
+    const { controller, api } = createController();
+    const states: AuthState[] = [];
+    controller.subscribe(state => states.push(state));
+    api.bootstrap.mockRejectedValue({
+      code: 'NetworkError',
+      message: 'private bootstrap response details',
+      credential: providerCredential,
+    });
+
+    await controller.verifyOtp('+10000000000', '123456');
+
+    expect(controller.state).toEqual({ status: 'error', error: { code: 'NetworkError' } });
+    expect(controller.state.status).not.toBe('authenticated');
+    expect(JSON.stringify(controller.state)).not.toContain('private bootstrap response details');
+    expect(JSON.stringify(states)).not.toContain(providerCredential);
+  });
+
+  it('maps current-user API rejection during restoration without exposing details or credentials', async () => {
+    const { controller, provider, api } = createController();
+    const states: AuthState[] = [];
+    controller.subscribe(state => states.push(state));
+    provider.restoreSession.mockResolvedValue(providerCredential);
+    api.getCurrentUser.mockRejectedValue({
+      code: 'AuthenticationRequired',
+      message: 'private current-user response details',
+      credential: providerCredential,
+    });
+
+    await controller.initialize();
+
+    expect(controller.state).toEqual({
+      status: 'error',
+      error: { code: 'AuthenticationRequired' },
+    });
+    expect(controller.state.status).not.toBe('authenticated');
+    expect(JSON.stringify(controller.state)).not.toContain('private current-user response details');
+    expect(JSON.stringify(states)).not.toContain(providerCredential);
+  });
+
   it('becomes unauthenticated after provider sign-out', async () => {
     const { controller, provider } = createController();
     await controller.verifyOtp('+10000000000', '123456');
@@ -118,6 +158,57 @@ describe('AuthStateController', () => {
 
     expect(provider.signOut).toHaveBeenCalledTimes(1);
     expect(controller.state).toEqual({ status: 'unauthenticated' });
+  });
+
+  it('does not let pending authentication override a newer logout', async () => {
+    const { controller, api } = createController();
+    const states: AuthState[] = [];
+    controller.subscribe(state => states.push(state));
+    let resolveBootstrap: (value: User | PromiseLike<User>) => void = () => {};
+    let markBootstrapStarted: () => void = () => {};
+    const bootstrapStarted = new Promise<void>(resolve => {
+      markBootstrapStarted = resolve;
+    });
+    api.bootstrap.mockImplementation(
+      () =>
+        new Promise<User>(resolve => {
+          resolveBootstrap = resolve;
+          markBootstrapStarted();
+        }),
+    );
+
+    const authentication = controller.verifyOtp('+10000000000', '123456');
+    await bootstrapStarted;
+    await controller.logout();
+    expect(controller.state).toEqual({ status: 'unauthenticated' });
+
+    resolveBootstrap(user);
+    await authentication;
+
+    expect(controller.state).toEqual({ status: 'unauthenticated' });
+    expect(states.map(state => state.status)).toEqual([
+      'unknown',
+      'authenticating',
+      'unauthenticated',
+    ]);
+  });
+
+  it('maps provider sign-out failure without exposing its message or credentials', async () => {
+    const { controller, provider } = createController();
+    const states: AuthState[] = [];
+    controller.subscribe(state => states.push(state));
+    await controller.verifyOtp('+10000000000', '123456');
+    provider.signOut.mockRejectedValue({
+      code: 'NetworkError',
+      message: 'private provider sign-out details',
+      credential: providerCredential,
+    });
+
+    await controller.logout();
+
+    expect(controller.state).toEqual({ status: 'error', error: { code: 'NetworkError' } });
+    expect(JSON.stringify(controller.state)).not.toContain('private provider sign-out details');
+    expect(JSON.stringify(states)).not.toContain(providerCredential);
   });
 
   it('represents session expiration without retaining user or credential data', () => {
