@@ -13,7 +13,7 @@ Statuses describe the current repository unless a row is explicitly marked as fu
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Jest (`npm test -- --ci`) | **IMPLEMENTED** | One test verifies that the root placeholder renders. No feature behavior is covered yet. |
+| Jest (`npm test -- --ci`) | **IMPLEMENTED** | 38 passing tests across the auth controller, LoginScreen, AuthGate, and App composition suites listed below. Tests use fakes; no real Firebase/backend integration is covered. |
 
 ## Android build verification
 
@@ -49,6 +49,22 @@ Real hardware is not permanently connected to the Xubuntu workstation. Hardware-
 | Check | Status | Current coverage |
 | --- | --- | --- |
 | BLE permission, discovery, connection, and device interaction tests | **PLANNED** | No BLE implementation exists. These tests require compatible physical hardware and should be introduced only if a feature requires BLE. |
+
+## M1 authentication tests
+
+The mobile auth foundation and its boundary-level tests are implemented. These tests use mocked ports or the development composition and do not establish real-provider or real-backend behavior.
+
+| Test category | Status | Current / planned verification |
+| --- | --- | --- |
+| AuthStateController state, OTP orchestration, restoration, logout, error mapping, subscriptions, stale-operation and credential-isolation behavior | **IMPLEMENTED** | `src/application/auth/__tests__/AuthStateController.test.ts` (14 tests) exercises the application boundary using fake provider/API ports. |
+| Login UI phone/code flow, progress, safe errors, retry, subscription lifecycle, credential non-disclosure | **IMPLEMENTED** | `src/presentation/auth/__tests__/LoginScreen.test.tsx` (9 tests) exercises LoginScreen with a fake AuthStateController boundary. |
+| AuthGate state mapping, restoration trigger, subscription lifecycle, stale/unmounted behavior, form preservation | **IMPLEMENTED** | `src/presentation/auth/__tests__/AuthGate.test.tsx` (11 tests) exercises gate behavior using fake ports. |
+| App composition and development OTP preview flow | **IMPLEMENTED** | `__tests__/App.test.tsx` (4 tests) verifies root integration and the in-memory development composition; this is not a production provider. |
+| Real provider OTP success/failure, invalid/expired credential behavior, and provider credential expiration | **PLANNED** | No Firebase or other concrete provider adapter is integrated; boundary fakes do not verify provider behavior. |
+| Real authentication restoration and provider sign-out | **PLANNED** | Controller behavior with fake ports is tested; restoration/logout against a real provider remains unverified. |
+| Backend 401/403 handling, user provisioning/bootstrap, and current-user retrieval | **PLANNED** | `POST /v1/auth/bootstrap` and `GET /v1/me` remain planned contracts; no backend or HTTP client exists. |
+| Server authorization and resource ownership | **PLANNED** | No backend authorization or resource ownership implementation exists to test. |
+| Final M1 test coverage / CI and release verification | **PLANNED** | M1.7–M1.9 remain open; current unit tests and general CI do not replace provider/backend or final APK/device verification. |
 
 ## Completion rule
 
