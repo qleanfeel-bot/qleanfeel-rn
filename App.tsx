@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import type { AuthStateController } from './src/application/auth/AuthStateController';
 import { createDevelopmentAuthController } from './src/development/auth/createDevelopmentAuthController';
-import { LoginScreen } from './src/presentation/auth/LoginScreen';
+import { AuthGate } from './src/presentation/auth/AuthGate';
 
 interface AppProps {
   readonly authController?: AuthStateController;
@@ -16,7 +16,7 @@ function App({ authController }: AppProps) {
   return (
     <View style={styles.container} testID="qleanfeel-root">
       <StatusBar barStyle="dark-content" />
-      <LoginScreen controller={controller} />
+      <AuthGate controller={controller} />
     </View>
   );
 }

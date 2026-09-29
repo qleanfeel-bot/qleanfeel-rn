@@ -1,0 +1,203 @@
+import React from 'react';
+import ReactTestRenderer from 'react-test-renderer';
+import type { User } from '../../../domain/auth/entities/User';
+import type { ProviderCredential } from '../../../application/auth/ProviderCredential';
+import type { AuthApi } from '../../../application/auth/ports/AuthApi';
+import type { AuthProviderAdapter } from '../../../application/auth/ports/AuthProviderAdapter';
+import { AuthStateController } from '../../../application/auth/AuthStateController';
+import { AuthGate } from '../AuthGate';
+
+const user: User = {
+  id: 'internal-user-id',
+  status: 'active',
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+};
+const credential = 'opaque-test-credential' as ProviderCredential;
+
+function createController() {
+  const provider: jest.Mocked<AuthProviderAdapter> = {
+    requestOtp: jest.fn().mockResolvedValue(undefined),
+    verifyOtp: jest.fn().mockResolvedValue(credential),
+    restoreSession: jest.fn().mockResolvedValue(null),
+    signOut: jest.fn().mockResolvedValue(undefined),
+  };
+  const api: jest.Mocked<AuthApi> = {
+    bootstrap: jest.fn().mockResolvedValue(user),
+    getCurrentUser: jest.fn().mockResolvedValue(user),
+  };
+
+  return { controller: new AuthStateController(provider, api), provider, api };
+}
+
+async function renderGate(controller: AuthStateController) {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<AuthGate controller={controller} />);
+  });
+  return renderer;
+}
+
+describe('AuthGate', () => {
+  it('renders a restoration surface while the state is unknown', async () => {
+    const { controller } = createController();
+    jest.spyOn(controller, 'initialize').mockResolvedValue(undefined);
+
+    const renderer = await renderGate(controller);
+
+    expect(renderer.root.findByProps({ testID: 'auth-gate-restoring' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Restoring your session…' })).toBeTruthy();
+  });
+
+  it('renders LoginScreen for unauthenticated state', async () => {
+    const { controller } = createController();
+
+    const renderer = await renderGate(controller);
+
+    expect(controller.state).toEqual({ status: 'unauthenticated' });
+    expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
+  });
+
+  it('renders an authentication loading surface while restoration is pending', async () => {
+    const { controller, provider } = createController();
+    provider.restoreSession.mockReturnValue(new Promise(() => undefined));
+
+    const renderer = await renderGate(controller);
+
+    expect(controller.state).toEqual({ status: 'authenticating' });
+    expect(renderer.root.findByProps({ testID: 'auth-gate-authenticating' })).toBeTruthy();
+  });
+
+  it('renders the authenticated placeholder when restoration resolves a user', async () => {
+    const { controller, provider } = createController();
+    provider.restoreSession.mockResolvedValue(credential);
+
+    const renderer = await renderGate(controller);
+
+    expect(controller.state).toEqual({ status: 'authenticated', user });
+    expect(renderer.root.findByProps({ testID: 'auth-gate-authenticated' })).toBeTruthy();
+  });
+
+  it('returns to LoginScreen when the session has expired', async () => {
+    const { controller, provider } = createController();
+    provider.restoreSession.mockRejectedValue({ code: 'SessionExpired' });
+
+    const renderer = await renderGate(controller);
+
+    expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'auth-error' }).props.children).toBe(
+      'Your session has expired. Please sign in again.',
+    );
+  });
+
+  it('shows a safe auth error and does not expose raw infrastructure messages', async () => {
+    const { controller, provider } = createController();
+    provider.restoreSession.mockRejectedValue({
+      message: 'private provider stack detail',
+      secret: credential,
+    });
+
+    const renderer = await renderGate(controller);
+
+    expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'auth-error' }).props.children).toBe(
+      'We could not sign you in. Please try again.',
+    );
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('private provider stack detail');
+    expect(JSON.stringify(renderer.toJSON())).not.toContain(credential);
+  });
+
+  it('subscribes once and does not create a second LoginScreen subscription', async () => {
+    const { controller } = createController();
+    const subscribe = jest.spyOn(controller, 'subscribe');
+
+    const renderer = await renderGate(controller);
+
+    expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
+    expect(subscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('unsubscribes on unmount', async () => {
+    const { controller } = createController();
+    const originalSubscribe = controller.subscribe.bind(controller);
+    const unsubscribe = jest.fn();
+    jest.spyOn(controller, 'subscribe').mockImplementation(listener => {
+      const cleanup = originalSubscribe(listener);
+      return () => {
+        unsubscribe();
+        cleanup();
+      };
+    });
+    const renderer = await renderGate(controller);
+
+    await ReactTestRenderer.act(() => renderer.unmount());
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts restoration through the controller, not directly through a provider', async () => {
+    const { controller, provider } = createController();
+    const initialize = jest.spyOn(controller, 'initialize');
+
+    await renderGate(controller);
+
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(provider.restoreSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves LoginScreen form input while the gate displays OTP loading', async () => {
+    const { controller, provider } = createController();
+    let finishOtpRequest: () => void = () => undefined;
+    provider.requestOtp.mockReturnValue(
+      new Promise(resolve => {
+        finishOtpRequest = resolve;
+      }),
+    );
+    const renderer = await renderGate(controller);
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'phone-input' }).props.onChangeText('+15550100');
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'request-otp-button' }).props.onPress();
+    });
+
+    expect(renderer.root.findByProps({ testID: 'auth-gate-authenticating' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'phone-input' }).props.value).toBe('+15550100');
+
+    await ReactTestRenderer.act(async () => {
+      finishOtpRequest();
+      await Promise.resolve();
+    });
+    expect(renderer.root.findByProps({ testID: 'otp-input' })).toBeTruthy();
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'otp-input' }).props.onChangeText('123456');
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'verify-otp-button' }).props.onPress();
+    });
+
+    expect(provider.verifyOtp).toHaveBeenCalledWith('+15550100', '123456');
+  });
+
+  it('does not update the unmounted gate when async restoration finishes', async () => {
+    const { controller, provider } = createController();
+    let finishRestore: (value: ProviderCredential | null) => void = () => undefined;
+    provider.restoreSession.mockReturnValue(
+      new Promise(resolve => {
+        finishRestore = resolve;
+      }),
+    );
+    const renderer = await renderGate(controller);
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await ReactTestRenderer.act(() => renderer.unmount());
+    await ReactTestRenderer.act(async () => {
+      finishRestore(null);
+      await Promise.resolve();
+    });
+
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+});

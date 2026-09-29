@@ -13,6 +13,10 @@ import type { AuthStateController } from '../../application/auth/AuthStateContro
 
 interface LoginScreenProps {
   readonly controller: AuthStateController;
+  /** Supplied by AuthGate to share its subscription and restoration lifecycle. */
+  readonly authState?: AuthState;
+  /** Keeps form state mounted while AuthGate displays a loading surface. */
+  readonly isVisible?: boolean;
 }
 
 const errorMessages: Record<AuthErrorCode, string> = {
@@ -26,17 +30,26 @@ const errorMessages: Record<AuthErrorCode, string> = {
   UnknownAuthError: 'We could not sign you in. Please try again.',
 };
 
-export function LoginScreen({ controller }: LoginScreenProps): React.JSX.Element {
-  const [authState, setAuthState] = useState<AuthState>(controller.state);
+export function LoginScreen({
+  controller,
+  authState: controlledAuthState,
+  isVisible = true,
+}: LoginScreenProps): React.JSX.Element {
+  const [localAuthState, setLocalAuthState] = useState<AuthState>(controller.state);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [code, setCode] = useState('');
   const [otpRequested, setOtpRequested] = useState(false);
+  const authState = controlledAuthState ?? localAuthState;
 
   useEffect(() => {
-    const unsubscribe = controller.subscribe(setAuthState);
+    if (controlledAuthState !== undefined) {
+      return;
+    }
+
+    const unsubscribe = controller.subscribe(setLocalAuthState);
     controller.initialize().catch(() => undefined);
     return unsubscribe;
-  }, [controller]);
+  }, [controller, controlledAuthState]);
 
   const isBusy = authState.status === 'unknown' || authState.status === 'authenticating';
   const showCodeInput = otpRequested || authState.status === 'awaitingOtp';
@@ -60,14 +73,14 @@ export function LoginScreen({ controller }: LoginScreenProps): React.JSX.Element
 
   if (authState.status === 'authenticated') {
     return (
-      <View style={styles.container} testID="login-authenticated">
+      <View style={[styles.container, !isVisible && styles.hidden]} testID="login-authenticated">
         <Text style={styles.title}>You’re signed in</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container} testID="login-screen">
+    <View style={[styles.container, !isVisible && styles.hidden]} testID="login-screen">
       <Text style={styles.title}>Sign in to Qleanfeel</Text>
       <TextInput
         accessibilityLabel="Phone number"
@@ -141,6 +154,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
     backgroundColor: '#ffffff',
+  },
+  hidden: {
+    display: 'none',
   },
   title: {
     marginBottom: 20,

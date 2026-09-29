@@ -65,6 +65,6 @@ test('development composition exercises OTP and authenticated UI without exposin
     renderer.root.findByProps({testID: 'verify-otp-button'}).props.onPress();
   });
 
-  expect(renderer.root.findByProps({testID: 'login-authenticated'})).toBeTruthy();
+  expect(renderer.root.findByProps({testID: 'auth-gate-authenticated'})).toBeTruthy();
   expect(JSON.stringify(renderer.toJSON())).not.toContain('development-preview-credential');
 });
