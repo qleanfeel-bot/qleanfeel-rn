@@ -76,6 +76,33 @@ describe('AuthGate', () => {
 
     expect(controller.state).toEqual({ status: 'authenticated', user });
     expect(renderer.root.findByProps({ testID: 'auth-gate-authenticated' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'authenticated-user-card' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Welcome back' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Qleanfeel User' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Account active' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'logout-button' })).toBeTruthy();
+    const renderedOutput = JSON.stringify(renderer.toJSON());
+    expect(renderedOutput).not.toContain(user.id);
+    expect(renderedOutput).not.toContain(credential);
+    expect(renderedOutput).not.toContain('accessToken');
+    expect(renderedOutput).not.toContain('refreshToken');
+  });
+
+  it('routes the logout control through AuthStateController.logout', async () => {
+    const { controller, provider } = createController();
+    provider.restoreSession.mockResolvedValue(credential);
+    const logout = jest.spyOn(controller, 'logout');
+    const renderer = await renderGate(controller);
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'logout-button' }).props.onPress();
+      await logout.mock.results[0]?.value;
+    });
+
+    expect(logout).toHaveBeenCalledTimes(1);
+    expect(provider.signOut).toHaveBeenCalledTimes(1);
+    expect(controller.state).toEqual({ status: 'unauthenticated' });
+    expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
   });
 
   it('returns to LoginScreen when the session has expired', async () => {
