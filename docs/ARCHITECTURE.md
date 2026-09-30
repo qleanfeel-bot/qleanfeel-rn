@@ -7,7 +7,7 @@
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
 - The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
-- The current Jest suite has 44 passing tests across `src/application/auth/__tests__/AuthStateController.test.ts`, `src/presentation/auth/__tests__/LoginScreen.test.tsx`, `src/presentation/auth/__tests__/AuthGate.test.tsx`, and `__tests__/App.test.tsx`. These exercise domain/application and presentation behavior with fakes; they are not real provider/backend integration tests.
+- The current Jest suite has 90 passing tests across `src/application/auth/__tests__/AuthStateController.test.ts`, `src/presentation/auth/__tests__/LoginScreen.test.tsx`, `src/presentation/auth/__tests__/AuthGate.test.tsx`, and `__tests__/App.test.tsx`. These exercise domain/application and presentation behavior with fakes; they are not real provider/backend integration tests.
 - The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
@@ -114,15 +114,25 @@ Planned endpoints (neither exists yet):
 
 HTTP semantics distinguish failure to establish authentication from an authenticated but disallowed action: `401 Unauthorized` for missing, invalid, or expired credentials; `403 Forbidden` when authentication succeeds but the action is not permitted. A protected resource may return `404` when hiding its existence is desirable. The appropriate `403`/`404` behavior is resource-specific; there is no single rule for all resources.
 
-### Profile — MOBILE CONTRACTS/UI IMPLEMENTED; BACKEND API CONTRACT PLANNED
+### Profile — MOBILE UI, HTTP/API BOUNDARIES, AND DEVELOPMENT CHAIN IMPLEMENTED; BACKEND CONTRACT ONLY
 
-The provider-independent Profile model, `ProfileRepository` contract, and `ProfileService` are implemented. The Profile screen supports viewing profile data and editing only `displayName`; the current App composition supplies an in-memory development implementation. That implementation is not production persistence. No Profile HTTP client, adapter, or backend endpoint currently exists.
+The provider-independent Profile model, `ProfileRepository` contract, and `ProfileService` are implemented. The Profile screen supports viewing profile data and editing only `displayName`. `ProfileApiRepository` adapts the existing repository contract to `ProfileApi` and the provider-independent `HttpTransport`. App uses a development composition with an in-memory HTTP handler and a development-only `AccessTokenProvider`; profile reads and edits exercise the same API/mapping/transport chain without a server. This is not production persistence and does not connect to a backend.
 
-For production, the backend is the authoritative source for Profile data. The UI continues to call `ProfileService`; a future infrastructure adapter will implement the existing `ProfileRepository` contract. HTTP details must not enter the Profile domain or UI.
+For production, the backend is the authoritative source for Profile data. The UI continues to call `ProfileService`; the infrastructure implementation uses the existing `ProfileRepository` contract. HTTP details must not enter the Profile domain or UI.
 
-Both planned endpoints require an authenticated request. The caller's identity is resolved by the backend from the trusted authentication context; the client does not select a profile using a `userId` path, query, or request-body field. The existing authentication documentation records the planned bearer-token contract; M2.4 does not implement or alter authentication, token storage, or refresh behavior.
+The authenticated request boundary is separate from authentication state and provider credentials:
 
-#### `GET /v1/me/profile` — PLANNED
+```text
+ProfileScreen → ProfileService → ProfileRepository
+  → ProfileApiRepository → ProfileApi → HttpTransport → Qleanfeel backend
+AccessTokenProvider → HttpTransport
+```
+
+`AccessTokenProvider` only supplies an opaque API access token. It does not manage login/logout or retain User/AuthState. It is distinct from `ProviderCredential`, which the auth flow passes to `AuthApi`. No Firebase adapter, token refresh, production credential persistence, or production backend URL is implemented.
+
+Both endpoints require an authenticated request. The caller's identity is resolved by the backend from the trusted authentication context; the client does not select a profile using a `userId` path, query, or request-body field. `ProfileRepository` retains its `userId` argument for application consistency; the API always calls `/v1/me/profile`, and a response whose `profile.userId` differs from the requested ID is rejected. M2.5 adds the token-provider boundary and HTTP implementation but does not implement production authentication, token storage, or refresh behavior.
+
+#### `GET /v1/me/profile` — CONTRACT IMPLEMENTED CLIENT-SIDE; BACKEND PLANNED
 
 Returns the current authenticated user's Profile. A successful response uses HTTP `200 OK` and a `profile` object compatible with the current domain model:
 
@@ -142,7 +152,7 @@ Returns the current authenticated user's Profile. A successful response uses HTT
 
 `userId` is supplied by the backend and is not an input for choosing whose profile to read. The nullable fields are returned as `null` when no value is available. If no Profile exists, the endpoint returns `404 Not Found` with `PROFILE_NOT_FOUND`; it does not create one implicitly. Responses contain profile data only, not credentials or session data.
 
-#### `PATCH /v1/me/profile` — PLANNED
+#### `PATCH /v1/me/profile` — CONTRACT IMPLEMENTED CLIENT-SIDE; BACKEND PLANNED
 
 Updates only the authenticated user's display name. The request body contains only the editable field:
 
@@ -152,7 +162,7 @@ Updates only the authenticated user's display name. The request body contains on
 
 The backend trims surrounding whitespace, rejects a value that is empty after trimming, and limits the name to 80 characters, matching the current mobile input limit. Request bodies containing fields other than `displayName` are rejected with `VALIDATION_ERROR`; this is not a general Profile update. A successful update returns HTTP `200 OK` with the complete updated `profile` shape shown above. If no Profile exists, it returns `404 Not Found` with `PROFILE_NOT_FOUND`; it does not create a Profile as a side effect.
 
-#### Profile API errors — PLANNED
+#### Profile API errors — CONTRACT IMPLEMENTED CLIENT-SIDE; BACKEND PLANNED
 
 Profile endpoint errors use a small JSON envelope with a stable code and a safe message:
 
