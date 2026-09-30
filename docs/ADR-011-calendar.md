@@ -37,6 +37,14 @@ Initial entry types are:
 
 A catch-all `other` type is deliberately excluded. New semantic types should be introduced explicitly when their behavior becomes relevant.
 
+The only initial entry statuses are:
+
+* `scheduled`
+* `cancelled`
+* `completed`
+
+No other status values are included in M3.0.
+
 `CalendarEntry` remains separate from the future `Order` entity.
 
 ### 2. CalendarEntry model
@@ -80,6 +88,14 @@ Calendar intervals use half-open semantics:
 ```
 
 Therefore an entry ending at exactly the moment another entry starts does not overlap it.
+
+For a requested list range `[from, to)`, both `from` and `to` are required and `from < to` must hold. An entry is included only when its interval overlaps the requested range:
+
+```text
+entry.startAt < to && from < entry.endAt
+```
+
+Thus `[10:00, 11:00)` and `[11:00, 12:00)` do not overlap.
 
 The UI may display and edit dates and times in the user's local timezone, while the underlying model and API representation remain absolute instants.
 
@@ -163,6 +179,33 @@ The API DTO is an infrastructure concern and must be mapped into the domain mode
 
 Ownership is resolved by the authenticated server context rather than by a client-provided user identifier.
 
+The client create body contains only `startAt`, `endAt`, `type`, and `title`. The server assigns `id` and `status`. The client does not send `id`, `status`, `userId`, or ownership information.
+
+### 8.1 Update request
+
+`PATCH /v1/me/calendar/entries/{entryId}` accepts any subset of the following optional fields:
+
+* `startAt`
+* `endAt`
+* `type`
+* `title`
+
+The client cannot change `id`, `status`, `userId`, or ownership information. For M3.0, `title` is not nullable; an empty string (`""`) is the value to send when clearing it. The API validates the resulting entry, including `startAt < endAt`, and returns `400 VALIDATION_ERROR` if the invariant would be violated.
+
+### 8.2 Delete response
+
+A successful `DELETE /v1/me/calendar/entries/{entryId}` returns `204 No Content` with no response body. The mobile HTTP transport must support successful responses without JSON when Calendar is implemented.
+
+### 8.3 List range and missing entries
+
+`GET /v1/me/calendar/entries` requires both `from` and `to`, represented as ISO-8601 UTC instants. If `from >= to`, the API returns `400 VALIDATION_ERROR`. A valid range with no matching entries succeeds with an empty list:
+
+```json
+{ "entries": [] }
+```
+
+An absent entry during PATCH or DELETE returns `404 ENTRY_NOT_FOUND`. An empty GET result is not a 404.
+
 ### 9. API ownership and security
 
 The backend is authoritative for:
@@ -195,7 +238,7 @@ Calendar API failures use stable error categories:
 | ----------- | ------------------- | ------------------------------------------------ |
 | 401         | `UNAUTHORIZED`      | Missing or invalid authentication                |
 | 403         | `FORBIDDEN`         | Authenticated request is not permitted           |
-| 404         | `ENTRY_NOT_FOUND`   | Requested calendar entry does not exist          |
+| 404         | `ENTRY_NOT_FOUND`   | Requested entry does not exist for PATCH or DELETE |
 | 400         | `VALIDATION_ERROR`  | Invalid calendar input                           |
 | 409         | `CALENDAR_CONFLICT` | Calendar operation conflicts with existing state |
 | 500         | `INTERNAL_ERROR`    | Unexpected server failure                        |

@@ -2,16 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import type { AuthState } from '../../application/auth/AuthState';
 import type { AuthStateController } from '../../application/auth/AuthStateController';
+import type { CalendarService } from '../../application/calendar/CalendarService';
 import type { ProfileService } from '../../application/profile/ProfileService';
 import { LoginScreen } from './LoginScreen';
-import { ProfileScreen } from '../profile/ProfileScreen';
+import { AuthenticatedAppShell } from './AuthenticatedAppShell';
 
 interface AuthGateProps {
+  readonly calendarService: CalendarService;
   readonly controller: AuthStateController;
   readonly profileService: ProfileService;
 }
 
-export function AuthGate({ controller, profileService }: AuthGateProps): React.JSX.Element {
+export function AuthGate({
+  calendarService,
+  controller,
+  profileService,
+}: AuthGateProps): React.JSX.Element {
   const [authState, setAuthState] = useState<AuthState>(controller.state);
 
   useEffect(() => {
@@ -49,13 +55,14 @@ export function AuthGate({ controller, profileService }: AuthGateProps): React.J
       ) : null}
       {isAuthenticated ? (
         <View style={styles.authenticated} testID="auth-gate-authenticated">
-          <ProfileScreen
-            profileService={profileService}
-            userId={authState.user.id}
-            accountStatus={authState.user.status}
+          <AuthenticatedAppShell
+            calendarService={calendarService}
             onLogout={() => {
               controller.logout().catch(() => undefined);
             }}
+            profileService={profileService}
+            userId={authState.user.id}
+            accountStatus={authState.user.status}
           />
         </View>
       ) : null}
