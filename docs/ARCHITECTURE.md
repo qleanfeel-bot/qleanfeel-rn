@@ -7,7 +7,7 @@
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
 - The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
-- The current Jest suite has 90 passing tests across `src/application/auth/__tests__/AuthStateController.test.ts`, `src/presentation/auth/__tests__/LoginScreen.test.tsx`, `src/presentation/auth/__tests__/AuthGate.test.tsx`, and `__tests__/App.test.tsx`. These exercise domain/application and presentation behavior with fakes; they are not real provider/backend integration tests.
+- M1's authentication test suites historically had 44 passing tests. The current full Jest suite has 90 passing tests across M1, M2, and infrastructure tests. These suites exercise domain/application and presentation behavior with fakes; they are not real provider/backend integration tests.
 - The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 

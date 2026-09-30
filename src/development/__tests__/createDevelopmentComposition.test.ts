@@ -1,7 +1,7 @@
 import { createDevelopmentComposition } from '../createDevelopmentComposition';
 
 describe('development profile HTTP integration', () => {
-  it('loads and updates a profile through service, repository, API, transport, and development handler', async () => {
+  it('trims a padded display name through the service, repository, API, transport, and development handler', async () => {
     const { profileService } = createDevelopmentComposition();
     const userId = 'development-preview-user';
 

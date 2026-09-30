@@ -36,13 +36,17 @@ export function createDevelopmentProfileHttpFetch(): HttpFetch {
       body === null ||
       !('displayName' in body) ||
       typeof body.displayName !== 'string' ||
-      body.displayName.trim().length === 0 ||
-      body.displayName.length > 80 ||
       Object.keys(body).some(key => key !== 'displayName')
     ) {
       return response(400, { error: { code: 'VALIDATION_ERROR' } });
     }
-    profile = { ...profile, displayName: body.displayName.trim() };
+
+    const displayName = body.displayName.trim();
+    if (!displayName || displayName.length > 80) {
+      return response(400, { error: { code: 'VALIDATION_ERROR' } });
+    }
+
+    profile = { ...profile, displayName };
     return response(200, { profile });
   };
 }
