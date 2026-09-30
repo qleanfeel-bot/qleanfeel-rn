@@ -5,14 +5,66 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import App from '../App';
+import { createDevelopmentAuthController } from '../src/development/auth/createDevelopmentAuthController';
 
-test('renders the Qleanfeel root component', async () => {
+test('renders LoginScreen in the Qleanfeel root component', async () => {
   let renderer: ReactTestRenderer.ReactTestRenderer;
 
-  await ReactTestRenderer.act(() => {
+  await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<App />);
   });
 
   expect(renderer!.root.findByProps({testID: 'qleanfeel-root'})).toBeTruthy();
-  expect(renderer!.root.findByProps({children: 'Qleanfeel'})).toBeTruthy();
+  expect(renderer!.root.findByProps({testID: 'login-screen'})).toBeTruthy();
+  expect(renderer!.root.findByProps({testID: 'phone-input'})).toBeTruthy();
+  expect(renderer!.root.findByProps({children: 'Sign in to Qleanfeel'})).toBeTruthy();
+});
+
+test('supplies the injected AuthStateController to LoginScreen', async () => {
+  const authController = createDevelopmentAuthController();
+  const subscribe = jest.spyOn(authController, 'subscribe');
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<App authController={authController} />);
+  });
+
+  expect(renderer!.root.findByProps({testID: 'login-screen'})).toBeTruthy();
+  expect(subscribe).toHaveBeenCalledTimes(1);
+});
+
+test('renders using the development composition without provider or API infrastructure', async () => {
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<App />);
+  });
+
+  expect(renderer!.root.findByProps({testID: 'request-otp-button'})).toBeTruthy();
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain('development-preview-credential');
+});
+
+test('development composition exercises OTP and authenticated UI without exposing its credential', async () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<App />);
+  });
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'phone-input'}).props.onChangeText('+15550100');
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'request-otp-button'}).props.onPress();
+  });
+  expect(renderer.root.findByProps({testID: 'otp-input'})).toBeTruthy();
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'otp-input'}).props.onChangeText('000000');
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'verify-otp-button'}).props.onPress();
+  });
+
+  expect(renderer.root.findByProps({testID: 'auth-gate-authenticated'})).toBeTruthy();
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('development-preview-credential');
 });

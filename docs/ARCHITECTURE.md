@@ -2,11 +2,13 @@
 
 ## Current state — IMPLEMENTED
 
-- The mobile application uses React Native. `App.tsx` is at the repository root and currently renders a minimal Qleanfeel placeholder screen.
+- The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated user-card surface.
 - Android and iOS native project shells are present. Both use the application/bundle identifier `com.qleanfeel.app`.
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
-- There is no implemented feature-module tree under `src/`, backend, API layer, authentication system, or application data architecture yet.
-- The existing Jest coverage is a single test that checks rendering of the root placeholder component.
+- The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
+- The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
+- The current Jest suite has 44 passing tests across `src/application/auth/__tests__/AuthStateController.test.ts`, `src/presentation/auth/__tests__/LoginScreen.test.tsx`, `src/presentation/auth/__tests__/AuthGate.test.tsx`, and `__tests__/App.test.tsx`. These exercise domain/application and presentation behavior with fakes; they are not real provider/backend integration tests.
+- The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
 ## Planned target structure — PLANNED
@@ -53,6 +55,77 @@ The eventual backend direction is a modular monolith initially. No backend imple
 - Add infrastructure only to meet a concrete requirement.
 
 These are governance principles for future work, not claims that corresponding systems already exist.
+
+## Authentication — MOBILE FOUNDATION IMPLEMENTED; PROVIDER/BACKEND INTEGRATION PLANNED
+
+The provider-independent mobile authentication foundation is implemented. Real authentication against an external provider and backend is not. Firebase Authentication is the planned first provider, not currently integrated. Its UID identifies an external provider subject; it is not the Qleanfeel User ID. `User`, `AuthIdentity`, and `AuthSession` are provider-independent Qleanfeel domain concepts; AuthIdentity links an internal User to an external identity:
+
+```text
+Firebase identity (providerSubject = Firebase UID)
+                         ↓
+                    AuthIdentity
+                         ↓
+                  Qleanfeel User
+```
+
+AuthIdentity fields are `id`, `userId`, `provider`, `providerSubject`, `createdAt`, and `lastAuthenticatedAt`. For a future Firebase adapter, `provider` is `firebase`, and `providerSubject` is the Firebase UID. AuthSession is separate from User and AuthIdentity and contains no provider credential. The current AuthApi contract returns the Qleanfeel User; the controller does not synthesize an AuthSession. No custom Qleanfeel token/session system or credential persistence is implemented.
+
+### Mobile state and provider boundary — IMPLEMENTED CONTRACTS; PROVIDER ADAPTER PLANNED
+
+The mobile Domain/Application boundary is provider-agnostic. Provider-specific SDK types and exceptions must stay inside a future adapter. Current contracts make the boundary explicit:
+
+```text
+AuthStateController
+       ↓
+AuthProviderAdapter / AuthApi ports
+       ↓
+future provider adapter / backend API implementation
+```
+
+`AuthStateController` owns application authentication state and coordinates restoration, OTP request/verification, and logout through the ports. Provider failures are represented with provider-independent auth error codes. No Firebase adapter, concrete provider implementation, or HTTP/API client currently exists.
+
+`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or the authenticated user card. The card displays Qleanfeel branding, “Welcome back,” a generic user label, “Account active,” and a logout control. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
+
+Firebase is planned as the first provider but is not integrated. Backend authentication/API is planned; `POST /v1/auth/bootstrap` and `GET /v1/me` do not exist. No production credential persistence or production signing is configured.
+
+### Backend identity and authorization — PLANNED
+
+The backend is intended to be authoritative for authorization. Authentication establishes who the caller is; authorization determines what the caller may do; resource ownership determines whether the caller may access a particular resource. The client must never be trusted to assert `userId`, `role`, permissions, or ownership. User roles are business/authorization state, not authentication identity; the model must allow multiple roles, for example `roles: ["CLIENT", "CLEANER"]`. Backend authorization and role behavior are not implemented.
+
+The future backend provider boundary is expected to verify an external credential, resolve the external identity, and then resolve that identity to a Qleanfeel User:
+
+```text
+Authentication Provider Layer
+├── FirebaseVerifier
+├── FutureCustomVerifier
+└── FutureWeb3Verifier
+
+external credential → verified external identity → AuthIdentity → Qleanfeel User
+```
+
+The planned initial mobile/backend contract sends `Authorization: Bearer <Firebase ID token>`. The future backend must verify this token server-side. The mobile client must not treat a token as valid merely because it can decode it locally.
+
+Planned endpoints (neither exists yet):
+
+| Endpoint | Planned purpose |
+| --- | --- |
+| `POST /v1/auth/bootstrap` | Verify the external credential; resolve or create AuthIdentity and Qleanfeel User; return the Qleanfeel authenticated identity/context. |
+| `GET /v1/me` | Return the current Qleanfeel User and read current authorization/business identity state. |
+
+HTTP semantics distinguish failure to establish authentication from an authenticated but disallowed action: `401 Unauthorized` for missing, invalid, or expired credentials; `403 Forbidden` when authentication succeeds but the action is not permitted. A protected resource may return `404` when hiding its existence is desirable. The appropriate `403`/`404` behavior is resource-specific; there is no single rule for all resources.
+
+### Future Web3 compatibility — FUTURE
+
+Web3 remains future work and is not part of M1 implementation. A future model may represent a wallet separately from authentication identity:
+
+```text
+User
+├── AuthIdentity
+│   └── Firebase
+└── WalletIdentity
+```
+
+A wallet is not automatically an authentication identity. A possible future business flow is a completed/validated business event → reward calculation → reward issuance → optional blockchain settlement. None of these capabilities is implemented or included in M1.
 
 ## Remote-first development
 
