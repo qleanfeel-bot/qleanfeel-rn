@@ -13,7 +13,7 @@ Statuses describe the current repository unless a row is explicitly marked as fu
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Jest (`npm test -- --ci`) | **IMPLEMENTED** | 44 passing tests across the auth controller, LoginScreen, AuthGate, and App composition suites listed below. Tests use fakes; no real Firebase/backend integration is covered. |
+| Jest (`npm test -- --ci`) | **IMPLEMENTED** | Covers auth controller/UI, Profile UI/service, HTTP transport, API repository, development access token, and local end-to-end profile composition. Tests use fakes/in-memory handlers; no real Firebase/backend integration is covered. |
 
 ## Android build verification
 
@@ -61,6 +61,9 @@ The mobile auth foundation and its boundary-level tests are implemented. These t
 | Login UI phone/code flow, progress, safe errors, retry, subscription lifecycle, credential non-disclosure | **IMPLEMENTED** | `src/presentation/auth/__tests__/LoginScreen.test.tsx` (10 tests) exercises LoginScreen with a fake AuthStateController boundary. |
 | AuthGate state mapping, restoration trigger, subscription lifecycle, stale/unmounted behavior, form preservation, authenticated card and logout | **IMPLEMENTED** | `src/presentation/auth/__tests__/AuthGate.test.tsx` (12 tests) exercises gate behavior using fake ports. |
 | App composition and development OTP preview flow | **IMPLEMENTED** | `__tests__/App.test.tsx` (4 tests) verifies root integration and the in-memory development composition; this is not a production provider. |
+| HTTP transport status, JSON, authorization, and network behavior | **IMPLEMENTED** | `src/infrastructure/http/__tests__/HttpTransport.test.ts` covers GET/PATCH JSON, token/no-token headers, safe 400/401/403/404/500 mapping, and network failure. |
+| Profile API/repository contract and mapping | **IMPLEMENTED** | `src/infrastructure/profile/__tests__/ProfileApiRepository.test.ts` verifies `/v1/me/profile`, PATCH body, DTO mapping, 404-to-null, safe status errors, and requested identity consistency. |
+| Development access-token and service-to-transport chain | **IMPLEMENTED** | `src/infrastructure/auth/__tests__/DevelopmentAccessTokenProvider.test.ts` and `src/development/__tests__/createDevelopmentComposition.test.ts` verify bearer-header use and profile read/update without a backend. |
 | Real provider OTP success/failure, invalid/expired credential behavior, and provider credential expiration | **PLANNED** | No Firebase or other concrete provider adapter is integrated; boundary fakes do not verify provider behavior. |
 | Real authentication restoration and provider sign-out | **PLANNED** | Controller behavior with fake ports is tested; restoration/logout against a real provider remains unverified. |
 | Backend 401/403 handling, user provisioning/bootstrap, and current-user retrieval | **PLANNED** | `POST /v1/auth/bootstrap` and `GET /v1/me` remain planned contracts; no backend or HTTP client exists. |

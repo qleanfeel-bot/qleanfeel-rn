@@ -4,7 +4,10 @@ import type { User } from '../../../domain/auth/entities/User';
 import type { ProviderCredential } from '../../../application/auth/ProviderCredential';
 import type { AuthApi } from '../../../application/auth/ports/AuthApi';
 import type { AuthProviderAdapter } from '../../../application/auth/ports/AuthProviderAdapter';
+import type { Profile } from '../../../domain/profile/entities/Profile';
+import type { ProfileRepository } from '../../../domain/profile/repositories/ProfileRepository';
 import { AuthStateController } from '../../../application/auth/AuthStateController';
+import { ProfileService } from '../../../application/profile/ProfileService';
 import { AuthGate } from '../AuthGate';
 
 const user: User = {
@@ -14,6 +17,23 @@ const user: User = {
   updatedAt: new Date('2026-01-01T00:00:00.000Z'),
 };
 const credential = 'opaque-test-credential' as ProviderCredential;
+const profile: Profile = {
+  userId: user.id,
+  displayName: 'Qleanfeel User',
+  phone: null,
+  email: null,
+  avatar: null,
+  locale: null,
+  country: null,
+};
+
+function createProfileService(): ProfileService {
+  const repository: ProfileRepository = {
+    getProfile: jest.fn().mockResolvedValue(profile),
+    updateDisplayName: jest.fn().mockResolvedValue(profile),
+  };
+  return new ProfileService(repository);
+}
 
 function createController() {
   const provider: jest.Mocked<AuthProviderAdapter> = {
@@ -30,10 +50,15 @@ function createController() {
   return { controller: new AuthStateController(provider, api), provider, api };
 }
 
-async function renderGate(controller: AuthStateController) {
+async function renderGate(
+  controller: AuthStateController,
+  profileService = createProfileService(),
+) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
-    renderer = ReactTestRenderer.create(<AuthGate controller={controller} />);
+    renderer = ReactTestRenderer.create(
+      <AuthGate controller={controller} profileService={profileService} />,
+    );
   });
   return renderer;
 }
@@ -68,7 +93,7 @@ describe('AuthGate', () => {
     expect(renderer.root.findByProps({ testID: 'auth-gate-authenticating' })).toBeTruthy();
   });
 
-  it('renders the authenticated placeholder when restoration resolves a user', async () => {
+  it('renders the Profile screen when restoration resolves a user', async () => {
     const { controller, provider } = createController();
     provider.restoreSession.mockResolvedValue(credential);
 
@@ -76,8 +101,8 @@ describe('AuthGate', () => {
 
     expect(controller.state).toEqual({ status: 'authenticated', user });
     expect(renderer.root.findByProps({ testID: 'auth-gate-authenticated' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'authenticated-user-card' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: 'Welcome back' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'profile-screen' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'profile-loaded' })).toBeTruthy();
     expect(renderer.root.findByProps({ children: 'Qleanfeel User' })).toBeTruthy();
     expect(renderer.root.findByProps({ children: 'Account active' })).toBeTruthy();
     expect(renderer.root.findByProps({ testID: 'logout-button' })).toBeTruthy();
@@ -103,6 +128,17 @@ describe('AuthGate', () => {
     expect(provider.signOut).toHaveBeenCalledTimes(1);
     expect(controller.state).toEqual({ status: 'unauthenticated' });
     expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
+  });
+
+  it('requests the profile for the authenticated Qleanfeel user ID', async () => {
+    const { controller, provider } = createController();
+    provider.restoreSession.mockResolvedValue(credential);
+    const profileService = createProfileService();
+    const getProfile = jest.spyOn(profileService, 'getProfile');
+
+    await renderGate(controller, profileService);
+
+    expect(getProfile).toHaveBeenCalledWith(user.id);
   });
 
   it('returns to LoginScreen when the session has expired', async () => {

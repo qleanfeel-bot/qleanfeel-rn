@@ -14,5 +14,7 @@ This register tracks known engineering work intentionally deferred from the curr
 | TD-008 | Testing | Add real Firebase and backend integration tests after concrete provider/API implementations exist. | Medium | OPEN | After provider and backend integration |
 | TD-009 | CI/Tooling | Review and address GitHub Actions or toolchain deprecation warnings when applicable. | Low | OPEN | CI/tooling maintenance when warnings require action |
 | TD-010 | CI/Testing | Consider explicit CI assertions for release APK bundle contents and standalone runtime behavior; manual artifact/device verification is already recorded. | Low | OPEN | CI hardening if automated assertions are useful |
+| TD-011 | Profile/Backend | Connect the implemented Profile HTTP/API boundaries to the production backend base URL and verify the agreed contract against a live backend. | High | OPEN | When backend is available |
+| TD-012 | Authentication/Security | Replace `DevelopmentAccessTokenProvider` with a production implementation that obtains a current authenticated API token; define refresh and secure lifecycle without conflating it with `ProviderCredential`. | High | OPEN | Provider/backend integration |
 
 Real provider/backend integration, production authentication, production credential persistence, and production signing are not implied by M1 completion. M1 completed the provider-independent mobile foundation and its current fake-backed test/CI/release-device verification.

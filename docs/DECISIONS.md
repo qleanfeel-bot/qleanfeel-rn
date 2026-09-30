@@ -56,3 +56,10 @@ This log records accepted decisions only. Proposed architecture principles are d
 
 - **Status:** Accepted (future capability)
 - **Decision:** Keep a future wallet identity separate from AuthIdentity. A wallet is not automatically authentication. Any future reward issuance or optional blockchain settlement follows validated business events and is outside M1; no Web3 capability is currently implemented.
+
+## ADR-010 — Separate authenticated API transport from domain and authentication state
+
+- **Status:** Accepted (provider-independent mobile boundaries implemented; production provider/backend integration planned)
+- **Decision:** Profile data access remains provider-independent through `ProfileRepository`. Concrete infrastructure communicates with the backend through HTTP/API boundaries. Authenticated API requests obtain an opaque access token through the application-level `AccessTokenProvider` port. Profile Domain/Application do not know HTTP, Firebase, bearer tokens, API URLs, or provider SDKs.
+- **Identity rule:** The `userId` passed to `ProfileRepository` is a consistency expectation only; it is not authorization authority for `/v1/me/profile`. The backend resolves the caller from authenticated context. The client does not put that `userId` in the `/me` URL or request body. A mismatched returned identity is rejected as a safe infrastructure error.
+- **Development:** The local composition exercises the same ProfileService → ProfileApiRepository → ProfileApi → HttpTransport chain using a development-only token provider and in-memory HTTP handler. It does not connect to a real backend or implement production authentication/token refresh.
