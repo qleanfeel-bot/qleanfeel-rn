@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import type { UserStatus } from '../../domain/auth/entities/User';
 import type { Profile } from '../../domain/profile/entities/Profile';
 import type { ProfileService } from '../../application/profile/ProfileService';
+import { EditProfileScreen } from './EditProfileScreen';
 
 interface ProfileScreenProps {
   readonly profileService: ProfileService;
@@ -16,6 +17,7 @@ type ProfileViewState =
   | { readonly status: 'loaded'; readonly profile: Profile }
   | { readonly status: 'missing' }
   | { readonly status: 'error' };
+type ProfileScreenMode = 'view' | 'edit';
 
 export function ProfileScreen({
   profileService,
@@ -25,6 +27,7 @@ export function ProfileScreen({
 }: ProfileScreenProps): React.JSX.Element {
   const [viewState, setViewState] = useState<ProfileViewState>({ status: 'loading' });
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [screenMode, setScreenMode] = useState<ProfileScreenMode>('view');
 
   useEffect(() => {
     let isMounted = true;
@@ -48,16 +51,21 @@ export function ProfileScreen({
   }, [profileService, userId, loadAttempt]);
 
   const retry = () => setLoadAttempt(current => current + 1);
+  const isEditing = viewState.status === 'loaded' && screenMode === 'edit';
 
   return (
     <View style={styles.screen} testID="profile-screen">
-      <View style={styles.header}>
-        <View style={styles.brandMark}>
-          <Text style={styles.brandMarkText}>Q</Text>
-        </View>
-        <Text style={styles.brandName}>Qleanfeel</Text>
-      </View>
-      <Text style={styles.title}>Profile</Text>
+      {!isEditing ? (
+        <>
+          <View style={styles.header}>
+            <View style={styles.brandMark}>
+              <Text style={styles.brandMarkText}>Q</Text>
+            </View>
+            <Text style={styles.brandName}>Qleanfeel</Text>
+          </View>
+          <Text style={styles.title}>Profile</Text>
+        </>
+      ) : null}
 
       {viewState.status === 'loading' ? (
         <View style={styles.messageCard} testID="profile-loading">
@@ -83,7 +91,20 @@ export function ProfileScreen({
         </View>
       ) : null}
 
-      {viewState.status === 'loaded' ? (
+      {viewState.status === 'loaded' && screenMode === 'edit' ? (
+        <EditProfileScreen
+          onCancel={() => setScreenMode('view')}
+          onSaved={updatedProfile => {
+            setViewState({ status: 'loaded', profile: updatedProfile });
+            setScreenMode('view');
+          }}
+          profile={viewState.profile}
+          profileService={profileService}
+          userId={userId}
+        />
+      ) : null}
+
+      {viewState.status === 'loaded' && screenMode === 'view' ? (
         <View style={styles.profileCard} testID="profile-loaded">
           <View style={styles.avatar} testID="profile-avatar">
             <Text style={styles.avatarText}>{getInitial(viewState.profile.displayName)}</Text>
@@ -104,9 +125,7 @@ export function ProfileScreen({
 
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ disabled: true }}
-            disabled
-            onPress={() => undefined}
+            onPress={() => setScreenMode('edit')}
             style={styles.editButton}
             testID="edit-profile-button">
             <Text style={styles.editText}>Edit profile</Text>

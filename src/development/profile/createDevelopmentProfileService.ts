@@ -6,7 +6,7 @@ const developmentUserId = 'development-preview-user';
 
 /** In-memory preview data only; this is not production profile persistence. */
 export function createDevelopmentProfileService(): ProfileService {
-  const profile: Profile = {
+  let profile: Profile = {
     userId: developmentUserId,
     displayName: 'Qleanfeel User',
     phone: null,
@@ -18,8 +18,13 @@ export function createDevelopmentProfileService(): ProfileService {
 
   const repository: ProfileRepository = {
     getProfile: async userId => (userId === developmentUserId ? profile : null),
-    updateDisplayName: async () => {
-      throw new Error('Profile editing is not available in the development preview.');
+    updateDisplayName: async (userId, displayName) => {
+      if (userId !== developmentUserId) {
+        return null;
+      }
+
+      profile = { ...profile, displayName };
+      return profile;
     },
   };
 

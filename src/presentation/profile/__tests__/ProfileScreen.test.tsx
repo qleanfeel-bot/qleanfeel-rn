@@ -29,6 +29,7 @@ function createProfileService(
 async function renderProfile(
   service: ProfileService,
   accountStatus: UserStatus = 'active',
+  onLogout = jest.fn(),
 ) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
@@ -37,17 +38,17 @@ async function renderProfile(
         profileService={service}
         userId={profile.userId}
         accountStatus={accountStatus}
-        onLogout={jest.fn()}
+        onLogout={onLogout}
       />,
     );
   });
-  return renderer;
+  return { renderer, onLogout };
 }
 
 describe('ProfileScreen', () => {
   it('shows a loading state while the profile is being retrieved', async () => {
     const { service } = createProfileService(() => new Promise(() => undefined));
-    const renderer = await renderProfile(service);
+    const { renderer } = await renderProfile(service);
 
     expect(renderer.root.findByProps({ testID: 'profile-loading' })).toBeTruthy();
     expect(renderer.root.findByProps({ children: 'Loading your profile…' })).toBeTruthy();
@@ -55,7 +56,7 @@ describe('ProfileScreen', () => {
 
   it('renders the loaded Profile name and contact details', async () => {
     const { service } = createProfileService();
-    const renderer = await renderProfile(service);
+    const { renderer } = await renderProfile(service);
 
     expect(renderer.root.findByProps({ testID: 'profile-loaded' })).toBeTruthy();
     expect(renderer.root.findByProps({ children: 'Alex Morgan' })).toBeTruthy();
@@ -65,7 +66,7 @@ describe('ProfileScreen', () => {
 
   it('shows initials when no avatar image is available', async () => {
     const { service } = createProfileService();
-    const renderer = await renderProfile(service);
+    const { renderer } = await renderProfile(service);
 
     expect(renderer.root.findByProps({ testID: 'profile-avatar' }).props.children.props.children)
       .toBe('A');
@@ -73,14 +74,21 @@ describe('ProfileScreen', () => {
 
   it('preserves the authenticated account status presentation', async () => {
     const { service } = createProfileService();
-    const renderer = await renderProfile(service, 'active');
+    const { renderer } = await renderProfile(service, 'active');
 
     expect(renderer.root.findByProps({ children: 'Account active' })).toBeTruthy();
   });
 
+  it('shows the suspended account status from the authenticated user', async () => {
+    const { service } = createProfileService();
+    const { renderer } = await renderProfile(service, 'suspended');
+
+    expect(renderer.root.findByProps({ children: 'Account suspended' })).toBeTruthy();
+  });
+
   it('shows an empty state when the repository has no profile', async () => {
     const { service } = createProfileService(async () => null);
-    const renderer = await renderProfile(service);
+    const { renderer } = await renderProfile(service);
 
     expect(renderer.root.findByProps({ testID: 'profile-missing' })).toBeTruthy();
     expect(renderer.root.findByProps({ children: 'Profile not found' })).toBeTruthy();
@@ -90,7 +98,7 @@ describe('ProfileScreen', () => {
     const { service } = createProfileService(() =>
       Promise.reject(new Error('private repository stack detail')),
     );
-    const renderer = await renderProfile(service);
+    const { renderer } = await renderProfile(service);
     const output = JSON.stringify(renderer.toJSON());
 
     expect(renderer.root.findByProps({ testID: 'profile-error' })).toBeTruthy();
@@ -98,19 +106,72 @@ describe('ProfileScreen', () => {
     expect(output).not.toContain('private repository stack detail');
   });
 
-  it('shows Edit profile as disabled and does not invoke profile mutation', async () => {
-    const { service, repository } = createProfileService();
-    const renderer = await renderProfile(service);
+  it('opens the Edit Profile screen from the enabled action', async () => {
+    const { service } = createProfileService();
+    const { renderer } = await renderProfile(service);
     const editButton = renderer.root.findByProps({ testID: 'edit-profile-button' });
 
     expect(editButton.props.children.props.children).toBe('Edit profile');
-    expect(editButton.props.disabled).toBe(true);
+    expect(editButton.props.disabled).not.toBe(true);
+    await ReactTestRenderer.act(async () => editButton.props.onPress());
+    expect(renderer.root.findByProps({ testID: 'edit-profile-screen' })).toBeTruthy();
+  });
+
+  it('returns to Profile with the updated display name after a successful edit', async () => {
+    const { service, repository } = createProfileService();
+    const updatedProfile = { ...profile, displayName: 'Alex' };
+    repository.updateDisplayName.mockResolvedValue(updatedProfile);
+    const { renderer } = await renderProfile(service);
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'edit-profile-button' }).props.onPress();
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'display-name-input' }).props.onChangeText('  Alex  ');
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'save-profile-button' }).props.onPress();
+    });
+
+    expect(repository.updateDisplayName).toHaveBeenCalledWith(profile.userId, 'Alex');
+    expect(renderer.root.findByProps({ testID: 'profile-loaded' })).toBeTruthy();
+    expect(renderer.root.findByProps({ children: 'Alex' })).toBeTruthy();
+  });
+
+  it('cancels editing without changing the original Profile', async () => {
+    const { service, repository } = createProfileService();
+    const { renderer } = await renderProfile(service);
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'edit-profile-button' }).props.onPress();
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'display-name-input' }).props.onChangeText('Draft');
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'cancel-profile-button' }).props.onPress();
+    });
+
     expect(repository.updateDisplayName).not.toHaveBeenCalled();
+    expect(renderer.root.findByProps({ children: 'Alex Morgan' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'profile-loaded' })).toBeTruthy();
+  });
+
+  it('keeps logout connected to the existing callback', async () => {
+    const { service } = createProfileService();
+    const onLogout = jest.fn();
+    const { renderer } = await renderProfile(service, 'active', onLogout);
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ testID: 'logout-button' }).props.onPress();
+    });
+
+    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 
   it('does not render internal identity or authentication credentials', async () => {
     const { service } = createProfileService();
-    const renderer = await renderProfile(service);
+    const { renderer } = await renderProfile(service);
     const output = JSON.stringify(renderer.toJSON());
 
     expect(output).not.toContain(profile.userId);
