@@ -8,7 +8,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | --- | --- | --- |
 | M0 — Foundation | React Native project initialized; Android/iOS identifiers normalized; basic project validation; debug build; CI; standalone Android release build | **COMPLETE** |
 | M0.5 — Project Governance | Project documentation; architecture rules; decision log; test matrix; remote-first development workflow | **COMPLETE** |
-| M1 — Authentication | Provider-independent mobile authentication foundation and remaining verification/integration milestones below | **IN PROGRESS** |
+| M1 — Authentication | Provider-independent mobile authentication foundation, tests, CI, and release/device verification | **COMPLETE** |
 | M2 — User/Profile | User profile and account information | **PLANNED** |
 | M3 — Calendar | Calendar and scheduling workflows | **PLANNED** |
 | M4 — Manual Orders | Manual order workflows | **PLANNED** |
@@ -21,11 +21,11 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M11 — Security hardening | Security review and hardening | **PLANNED** |
 | M12 — Production release preparation | Production readiness and release preparation | **PLANNED** |
 
-The mobile authentication domain, application state boundary, Login UI, and AuthGate are implemented. The app currently uses an in-memory development composition; real Firebase/backend integration and final M1 verification remain planned. M2–M12 are planning labels, not claims of existing functionality or settled implementation details.
+M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M2–M12 remain planned and are not claims of existing functionality or settled implementation details.
 
 ### M1 — Authentication decomposition
 
-M1.0 through M1.6 are complete. M1.7 through M1.9 remain planned; current boundary-level Jest tests and the existing general CI workflow do not constitute final authentication verification or release/device validation.
+M1.0 through M1.9 are complete. The completed release/device verification used the current development authentication composition; it does not validate real Firebase or backend authentication.
 
 | Sub-milestone | Scope | Status |
 | --- | --- | --- |
@@ -37,10 +37,10 @@ M1.0 through M1.6 are complete. M1.7 through M1.9 remain planned; current bounda
 | M1.4.1 — Auth state subscriptions | Add observable state subscriptions and safe unsubscription | **COMPLETE** |
 | M1.5 — Login UI | Implement provider-independent phone/OTP UI against AuthStateController | **COMPLETE** |
 | M1.5.1 — Login UI integration | Render Login UI from App using an isolated in-memory development composition | **COMPLETE** |
-| M1.6 — AuthGate | Select loading, login, or authenticated placeholder from AuthStateController state | **COMPLETE** |
-| M1.7 — Tests / final M1 test coverage | Complete any remaining M1 test coverage; current boundary/UI tests use fakes and do not verify real provider/backend integration | **PLANNED** |
-| M1.8 — CI verification | Complete M1-specific CI verification; general TypeScript, lint, Jest, and Android build/artifact CI already exists | **PLANNED** |
-| M1.9 — Release APK + physical-device verification | Verify the M1 auth application in a release APK and complete required physical-device checks | **PLANNED** |
+| M1.6 — AuthGate | Select loading, login, or authenticated user-card surface from AuthStateController state | **COMPLETE** |
+| M1.7 — Tests / final M1 test coverage | Complete the provider-independent auth/controller/UI tests (44 Jest tests); real provider/backend integration remains outside M1 | **COMPLETE** |
+| M1.8 — CI verification | Verify TypeScript, ESLint, Jest, Android debug/release builds, and APK artifacts in green CI | **COMPLETE** |
+| M1.9 — Release APK + physical-device verification | Build/install/test the release APK on physical Android hardware using the current development auth composition | **COMPLETE** |
 
 `POST /v1/auth/bootstrap` and `GET /v1/me` are planned contracts only; neither endpoint exists yet. Firebase Authentication is the planned first provider, not an existing integration.
 

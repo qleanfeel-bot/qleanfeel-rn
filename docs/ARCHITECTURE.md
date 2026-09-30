@@ -2,12 +2,13 @@
 
 ## Current state — IMPLEMENTED
 
-- The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated placeholder surface.
+- The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated user-card surface.
 - Android and iOS native project shells are present. Both use the application/bundle identifier `com.qleanfeel.app`.
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
 - The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
-- The current Jest suite has 38 passing tests across `src/application/auth/__tests__/AuthStateController.test.ts`, `src/presentation/auth/__tests__/LoginScreen.test.tsx`, `src/presentation/auth/__tests__/AuthGate.test.tsx`, and `__tests__/App.test.tsx`. These exercise domain/application and presentation behavior with fakes; they are not real provider/backend integration tests.
+- The current Jest suite has 44 passing tests across `src/application/auth/__tests__/AuthStateController.test.ts`, `src/presentation/auth/__tests__/LoginScreen.test.tsx`, `src/presentation/auth/__tests__/AuthGate.test.tsx`, and `__tests__/App.test.tsx`. These exercise domain/application and presentation behavior with fakes; they are not real provider/backend integration tests.
+- The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
 ## Planned target structure — PLANNED
@@ -83,7 +84,9 @@ future provider adapter / backend API implementation
 
 `AuthStateController` owns application authentication state and coordinates restoration, OTP request/verification, and logout through the ports. Provider failures are represented with provider-independent auth error codes. No Firebase adapter, concrete provider implementation, or HTTP/API client currently exists.
 
-`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or authenticated placeholder UI. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The app composition currently constructs a development-only in-memory fake so this UI can be exercised; it is not production authentication.
+`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or the authenticated user card. The card displays Qleanfeel branding, “Welcome back,” a generic user label, “Account active,” and a logout control. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
+
+Firebase is planned as the first provider but is not integrated. Backend authentication/API is planned; `POST /v1/auth/bootstrap` and `GET /v1/me` do not exist. No production credential persistence or production signing is configured.
 
 ### Backend identity and authorization — PLANNED
 
