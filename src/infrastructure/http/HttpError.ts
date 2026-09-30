@@ -3,6 +3,7 @@ export type HttpErrorCode =
   | 'Unauthorized'
   | 'Forbidden'
   | 'NotFound'
+  | 'Conflict'
   | 'ServerError'
   | 'NetworkError'
   | 'UnexpectedResponse';

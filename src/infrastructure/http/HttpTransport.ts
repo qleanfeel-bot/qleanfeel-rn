@@ -1,7 +1,7 @@
 import type { AccessTokenProvider } from '../../application/auth/ports/AccessTokenProvider';
 import { HttpError } from './HttpError';
 
-export type HttpMethod = 'GET' | 'PATCH';
+export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 export interface HttpRequest {
   readonly method: HttpMethod;
@@ -73,6 +73,10 @@ export class HttpTransport {
       throw new HttpError(statusToCode(response.status));
     }
 
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
     try {
       return (await response.json()) as T;
     } catch {
@@ -91,6 +95,8 @@ function statusToCode(status: number): ConstructorParameters<typeof HttpError>[0
       return 'Forbidden';
     case 404:
       return 'NotFound';
+    case 409:
+      return 'Conflict';
     default:
       return status >= 500 ? 'ServerError' : 'UnexpectedResponse';
   }

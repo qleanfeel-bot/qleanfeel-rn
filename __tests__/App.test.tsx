@@ -68,4 +68,18 @@ test('development composition exercises OTP and authenticated UI without exposin
   expect(renderer.root.findByProps({testID: 'auth-gate-authenticated'})).toBeTruthy();
   expect(renderer.root.findByProps({testID: 'profile-loaded'})).toBeTruthy();
   expect(JSON.stringify(renderer.toJSON())).not.toContain('development-preview-credential');
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'authenticated-shell-calendar-button'}).props.onPress();
+  });
+
+  expect(renderer.root.findByProps({testID: 'calendar-screen'})).toBeTruthy();
+  expect(renderer.root.findByProps({testID: 'calendar-entry-development-calendar-seed'}))
+    .toBeTruthy();
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'authenticated-shell-profile-button'}).props.onPress();
+  });
+
+  expect(renderer.root.findByProps({testID: 'profile-screen'})).toBeTruthy();
 });

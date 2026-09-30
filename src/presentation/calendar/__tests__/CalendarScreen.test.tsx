@@ -1,0 +1,229 @@
+import React from 'react';
+import ReactTestRenderer from 'react-test-renderer';
+import { TextInput } from 'react-native';
+import { CalendarService } from '../../../application/calendar/CalendarService';
+import { createCalendarEntry, type CalendarEntry } from '../../../domain/calendar/entities/CalendarEntry';
+import type { CalendarRepository } from '../../../domain/calendar/repositories/CalendarRepository';
+import { CalendarScreen } from '../CalendarScreen';
+
+const entry: CalendarEntry = {
+  id: 'entry-1',
+  startAt: '2026-10-05T07:00:00Z',
+  endAt: '2026-10-05T10:00:00Z',
+  type: 'blocked',
+  status: 'scheduled',
+  title: 'Unavailable',
+};
+
+function createCalendarService(initialEntries: CalendarEntry[] = []) {
+  let storedEntries = [...initialEntries];
+  let nextId = 1;
+  const repository: jest.Mocked<CalendarRepository> = {
+    getEntries: jest.fn(async (_from: string, _to: string) => [...storedEntries]),
+    createEntry: jest.fn(async input => {
+      const created = createCalendarEntry({
+        id: `created-${nextId}`,
+        status: 'scheduled',
+        ...input,
+      });
+      nextId += 1;
+      storedEntries = [...storedEntries, created];
+      return created;
+    }),
+    updateEntry: jest.fn(async (entryId, changes) => {
+      const existing = storedEntries.find(candidate => candidate.id === entryId);
+      if (!existing) {
+        throw new Error('entry not found');
+      }
+      const updated = createCalendarEntry({ ...existing, ...changes });
+      storedEntries = storedEntries.map(candidate => candidate.id === entryId ? updated : candidate);
+      return updated;
+    }),
+    deleteEntry: jest.fn(async entryId => {
+      storedEntries = storedEntries.filter(candidate => candidate.id !== entryId);
+    }),
+  };
+  return { service: new CalendarService(repository), repository };
+}
+
+async function renderCalendar(service: CalendarService) {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<CalendarScreen calendarService={service} />);
+  });
+  return renderer;
+}
+
+function control(renderer: ReactTestRenderer.ReactTestRenderer, testID: string) {
+  return renderer.root.findByProps({ testID });
+}
+
+async function press(renderer: ReactTestRenderer.ReactTestRenderer, testID: string) {
+  await ReactTestRenderer.act(async () => {
+    await control(renderer, testID).props.onPress();
+  });
+}
+
+async function enterText(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  testID: string,
+  value: string,
+) {
+  await ReactTestRenderer.act(async () => {
+    control(renderer, testID).props.onChangeText(value);
+  });
+}
+
+function localInput(daysFromToday: number, hour: number, minute = 0): string {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromToday);
+  date.setHours(hour, minute, 0, 0);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${String(date.getFullYear()).padStart(4, '0')}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function localInputToIso(value: string): string {
+  const [datePart, timePart] = value.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = timePart.split(':').map(Number);
+  return new Date(year, month - 1, day, hour, minute).toISOString();
+}
+
+describe('CalendarScreen', () => {
+  it('shows loading while the initial request is pending and calls getEntries for a date range', async () => {
+    const { service, repository } = createCalendarService();
+    repository.getEntries.mockReturnValue(new Promise(() => undefined));
+    const renderer = await renderCalendar(service);
+
+    expect(control(renderer, 'calendar-loading')).toBeTruthy();
+    expect(repository.getEntries).toHaveBeenCalledTimes(1);
+    const [from, to] = repository.getEntries.mock.calls[0];
+    expect(Date.parse(from)).toBeLessThan(Date.parse(to));
+  });
+
+  it('renders entry title, local start/end time, type, and read-only status', async () => {
+    const { service } = createCalendarService([entry]);
+    const renderer = await renderCalendar(service);
+
+    expect(control(renderer, `calendar-entry-${entry.id}-title`).props.children).toBe(entry.title);
+    expect(control(renderer, `calendar-entry-${entry.id}-start`).props.children.join(''))
+      .toContain(new Date(entry.startAt).toLocaleString());
+    expect(control(renderer, `calendar-entry-${entry.id}-end`).props.children.join(''))
+      .toContain(new Date(entry.endAt).toLocaleString());
+    expect(control(renderer, `calendar-entry-${entry.id}-status`).props.children.join(''))
+      .toBe('Status: scheduled');
+    expect(control(renderer, `calendar-entry-${entry.id}-type`).props.children.join(''))
+      .toBe('Type: blocked');
+  });
+
+  it('shows the empty state when getEntries returns no entries', async () => {
+    const { service } = createCalendarService();
+    const renderer = await renderCalendar(service);
+
+    expect(control(renderer, 'calendar-empty')).toBeTruthy();
+    expect(JSON.stringify(renderer.toJSON())).toContain('No calendar entries');
+  });
+
+  it('shows a safe load error and retries the service request', async () => {
+    const { service, repository } = createCalendarService([entry]);
+    repository.getEntries
+      .mockRejectedValueOnce(new Error('private calendar failure'))
+      .mockResolvedValueOnce([entry]);
+    const renderer = await renderCalendar(service);
+
+    expect(control(renderer, 'calendar-error')).toBeTruthy();
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('private calendar failure');
+    await press(renderer, 'calendar-retry-button');
+
+    expect(repository.getEntries).toHaveBeenCalledTimes(2);
+    expect(control(renderer, `calendar-entry-${entry.id}`)).toBeTruthy();
+  });
+
+  it('creates an entry from local date/time and refreshes the list after success', async () => {
+    const { service, repository } = createCalendarService();
+    const renderer = await renderCalendar(service);
+    const startAt = localInput(1, 10);
+    const endAt = localInput(1, 11);
+
+    await press(renderer, 'calendar-create-button');
+    await enterText(renderer, 'calendar-title-input', 'Personal time');
+    await enterText(renderer, 'calendar-start-input', startAt);
+    await enterText(renderer, 'calendar-end-input', endAt);
+    await press(renderer, 'calendar-type-personal');
+    await press(renderer, 'calendar-save-button');
+
+    expect(repository.createEntry).toHaveBeenCalledWith({
+      startAt: localInputToIso(startAt),
+      endAt: localInputToIso(endAt),
+      type: 'personal',
+      title: 'Personal time',
+    });
+    expect(repository.getEntries).toHaveBeenCalledTimes(2);
+    expect(renderer.root.findAllByProps({ testID: 'calendar-entry-form' })).toHaveLength(0);
+    expect(control(renderer, 'calendar-entry-created-1-title').props.children).toBe('Personal time');
+  });
+
+  it('validates invalid local time input before calling createEntry', async () => {
+    const { service, repository } = createCalendarService();
+    const renderer = await renderCalendar(service);
+
+    await press(renderer, 'calendar-create-button');
+    await enterText(renderer, 'calendar-start-input', 'not-a-local-date');
+    await press(renderer, 'calendar-save-button');
+
+    expect(repository.createEntry).not.toHaveBeenCalled();
+    expect(control(renderer, 'calendar-form-error')).toBeTruthy();
+  });
+
+  it('updates only editable fields, preserves status, and refreshes the list', async () => {
+    const { service, repository } = createCalendarService([entry]);
+    const renderer = await renderCalendar(service);
+    const startAt = localInput(2, 9);
+    const endAt = localInput(2, 10);
+
+    await press(renderer, `calendar-edit-${entry.id}`);
+    await enterText(renderer, 'calendar-title-input', 'Updated title');
+    await enterText(renderer, 'calendar-start-input', startAt);
+    await enterText(renderer, 'calendar-end-input', endAt);
+    await press(renderer, 'calendar-type-external_order');
+    await press(renderer, 'calendar-save-button');
+
+    expect(repository.updateEntry).toHaveBeenCalledWith(entry.id, {
+      startAt: localInputToIso(startAt),
+      endAt: localInputToIso(endAt),
+      type: 'external_order',
+      title: 'Updated title',
+    });
+    const changes = repository.updateEntry.mock.calls[0][1];
+    expect(Object.keys(changes).sort()).toEqual(['endAt', 'startAt', 'title', 'type']);
+    expect(changes).not.toHaveProperty('id');
+    expect(changes).not.toHaveProperty('status');
+    expect(repository.getEntries).toHaveBeenCalledTimes(2);
+    expect(control(renderer, `calendar-entry-${entry.id}-title`).props.children).toBe('Updated title');
+    expect(control(renderer, `calendar-entry-${entry.id}-status`).props.children.join(''))
+      .toBe('Status: scheduled');
+  });
+
+  it('shows status as read-only and does not offer a status input or selector', async () => {
+    const { service } = createCalendarService([entry]);
+    const renderer = await renderCalendar(service);
+
+    expect(control(renderer, `calendar-entry-${entry.id}-status`)).toBeTruthy();
+    await press(renderer, `calendar-edit-${entry.id}`);
+    expect(control(renderer, 'calendar-entry-form').findAllByType(TextInput)).toHaveLength(3);
+    expect(renderer.root.findAllByProps({ testID: 'calendar-type-scheduled' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'calendar-type-cancelled' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'calendar-type-completed' })).toHaveLength(0);
+  });
+
+  it('deletes an entry and reloads the list without expecting a response body', async () => {
+    const { service, repository } = createCalendarService([entry]);
+    const renderer = await renderCalendar(service);
+
+    await press(renderer, `calendar-delete-${entry.id}`);
+
+    expect(repository.deleteEntry).toHaveBeenCalledWith(entry.id);
+    expect(repository.getEntries).toHaveBeenCalledTimes(2);
+    expect(control(renderer, 'calendar-empty')).toBeTruthy();
+  });
+});

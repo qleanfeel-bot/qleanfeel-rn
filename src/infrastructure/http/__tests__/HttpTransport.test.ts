@@ -33,7 +33,39 @@ describe('HttpTransport', () => {
     });
   });
 
-  it.each([[400, 'BadRequest'], [401, 'Unauthorized'], [403, 'Forbidden'], [404, 'NotFound'], [500, 'ServerError']] as const)(
+  it('sends POST JSON', async () => {
+    const fetchImplementation = jest.fn().mockResolvedValue(makeResponse(201, { created: true })) as jest.MockedFunction<HttpFetch>;
+    const transport = new HttpTransport({ baseUrl: 'https://api.example', fetchImplementation });
+
+    await expect(transport.request({
+      method: 'POST',
+      path: '/v1/me/calendar/entries',
+      body: { title: 'Unavailable' },
+      authenticated: true,
+    })).resolves.toEqual({ created: true });
+    expect(fetchImplementation).toHaveBeenCalledWith('https://api.example/v1/me/calendar/entries', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: '{"title":"Unavailable"}',
+    });
+  });
+
+  it('accepts DELETE 204 No Content without attempting JSON parsing', async () => {
+    const json = jest.fn().mockRejectedValue(new Error('there is no response body'));
+    const response: HttpResponse = { status: 204, json };
+    const fetchImplementation = jest.fn().mockResolvedValue(response) as jest.MockedFunction<HttpFetch>;
+    const transport = new HttpTransport({ baseUrl: 'https://api.example', fetchImplementation });
+
+    await expect(transport.request({ method: 'DELETE', path: '/v1/me/calendar/entries/entry-1' }))
+      .resolves.toBeUndefined();
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      'https://api.example/v1/me/calendar/entries/entry-1',
+      { method: 'DELETE', headers: { Accept: 'application/json' } },
+    );
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it.each([[400, 'BadRequest'], [401, 'Unauthorized'], [403, 'Forbidden'], [404, 'NotFound'], [409, 'Conflict'], [500, 'ServerError']] as const)(
     'maps HTTP %i to safe %s error without reading the response body',
     async (status, code) => {
       const errorResponse: HttpResponse = { status, json: jest.fn().mockResolvedValue({ error: { message: 'private backend detail' } }) };
