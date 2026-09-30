@@ -2,7 +2,7 @@
 
 ## Current state — IMPLEMENTED
 
-- The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated user-card surface.
+- The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated Profile surface.
 - Android and iOS native project shells are present. Both use the application/bundle identifier `com.qleanfeel.app`.
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
@@ -84,7 +84,7 @@ future provider adapter / backend API implementation
 
 `AuthStateController` owns application authentication state and coordinates restoration, OTP request/verification, and logout through the ports. Provider failures are represented with provider-independent auth error codes. No Firebase adapter, concrete provider implementation, or HTTP/API client currently exists.
 
-`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or the authenticated user card. The card displays Qleanfeel branding, “Welcome back,” a generic user label, “Account active,” and a logout control. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
+`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or the authenticated `ProfileScreen`. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and preserves the existing logout action. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
 
 Firebase is planned as the first provider but is not integrated. Backend authentication/API is planned; `POST /v1/auth/bootstrap` and `GET /v1/me` do not exist. No production credential persistence or production signing is configured.
 
@@ -113,6 +113,59 @@ Planned endpoints (neither exists yet):
 | `GET /v1/me` | Return the current Qleanfeel User and read current authorization/business identity state. |
 
 HTTP semantics distinguish failure to establish authentication from an authenticated but disallowed action: `401 Unauthorized` for missing, invalid, or expired credentials; `403 Forbidden` when authentication succeeds but the action is not permitted. A protected resource may return `404` when hiding its existence is desirable. The appropriate `403`/`404` behavior is resource-specific; there is no single rule for all resources.
+
+### Profile — MOBILE CONTRACTS/UI IMPLEMENTED; BACKEND API CONTRACT PLANNED
+
+The provider-independent Profile model, `ProfileRepository` contract, and `ProfileService` are implemented. The Profile screen supports viewing profile data and editing only `displayName`; the current App composition supplies an in-memory development implementation. That implementation is not production persistence. No Profile HTTP client, adapter, or backend endpoint currently exists.
+
+For production, the backend is the authoritative source for Profile data. The UI continues to call `ProfileService`; a future infrastructure adapter will implement the existing `ProfileRepository` contract. HTTP details must not enter the Profile domain or UI.
+
+Both planned endpoints require an authenticated request. The caller's identity is resolved by the backend from the trusted authentication context; the client does not select a profile using a `userId` path, query, or request-body field. The existing authentication documentation records the planned bearer-token contract; M2.4 does not implement or alter authentication, token storage, or refresh behavior.
+
+#### `GET /v1/me/profile` — PLANNED
+
+Returns the current authenticated user's Profile. A successful response uses HTTP `200 OK` and a `profile` object compatible with the current domain model:
+
+```json
+{
+  "profile": {
+    "userId": "qleanfeel-user-id",
+    "displayName": "Alex",
+    "phone": null,
+    "email": null,
+    "avatar": null,
+    "locale": null,
+    "country": null
+  }
+}
+```
+
+`userId` is supplied by the backend and is not an input for choosing whose profile to read. The nullable fields are returned as `null` when no value is available. If no Profile exists, the endpoint returns `404 Not Found` with `PROFILE_NOT_FOUND`; it does not create one implicitly. Responses contain profile data only, not credentials or session data.
+
+#### `PATCH /v1/me/profile` — PLANNED
+
+Updates only the authenticated user's display name. The request body contains only the editable field:
+
+```json
+{ "displayName": "Alex" }
+```
+
+The backend trims surrounding whitespace, rejects a value that is empty after trimming, and limits the name to 80 characters, matching the current mobile input limit. Request bodies containing fields other than `displayName` are rejected with `VALIDATION_ERROR`; this is not a general Profile update. A successful update returns HTTP `200 OK` with the complete updated `profile` shape shown above. If no Profile exists, it returns `404 Not Found` with `PROFILE_NOT_FOUND`; it does not create a Profile as a side effect.
+
+#### Profile API errors — PLANNED
+
+Profile endpoint errors use a small JSON envelope with a stable code and a safe message:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Display name is invalid."
+  }
+}
+```
+
+The minimum categories are `401 Unauthorized` / `UNAUTHORIZED` for absent or invalid authentication, `403 Forbidden` / `FORBIDDEN` when an authenticated request is not permitted, `404 Not Found` / `PROFILE_NOT_FOUND` when the current user's Profile is absent, `400 Bad Request` / `VALIDATION_ERROR` for an invalid display name, and `500 Internal Server Error` / `INTERNAL_ERROR` for an unexpected server failure. Error messages must not expose stack traces or internal details. These endpoint-specific statuses do not define a universal `403` versus `404` policy for other resources.
 
 ### Future Web3 compatibility — FUTURE
 
