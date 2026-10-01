@@ -6,6 +6,10 @@ import { ProfileService } from '../application/profile/ProfileService';
 import { CalendarApi } from '../infrastructure/calendar/CalendarApi';
 import { CalendarApiRepository } from '../infrastructure/calendar/CalendarApiRepository';
 import { CalendarService } from '../application/calendar/CalendarService';
+import { ManualOrderService } from '../application/manualOrder/ManualOrderService';
+import { CreateScheduledManualOrder } from '../application/manualOrder/CreateScheduledManualOrder';
+import { ManualOrderApi } from '../infrastructure/manualOrder/ManualOrderApi';
+import { ManualOrderApiRepository } from '../infrastructure/manualOrder/ManualOrderApiRepository';
 import { createDevelopmentAuthController } from './auth/createDevelopmentAuthController';
 import { createDevelopmentHttpFetch } from './createDevelopmentHttpFetch';
 
@@ -17,5 +21,15 @@ export function createDevelopmentComposition() {
   });
   const profileService = new ProfileService(new ProfileApiRepository(new ProfileApi(transport)));
   const calendarService = new CalendarService(new CalendarApiRepository(new CalendarApi(transport)));
-  return { authController: createDevelopmentAuthController(), profileService, calendarService };
+  const manualOrderService = new ManualOrderService(
+    new ManualOrderApiRepository(new ManualOrderApi(transport)),
+  );
+  const createScheduledManualOrder = new CreateScheduledManualOrder(calendarService, manualOrderService);
+  return {
+    authController: createDevelopmentAuthController(),
+    profileService,
+    calendarService,
+    manualOrderService,
+    createScheduledManualOrder,
+  };
 }

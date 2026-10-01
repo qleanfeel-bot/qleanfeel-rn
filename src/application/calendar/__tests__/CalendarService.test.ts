@@ -15,6 +15,7 @@ function createRepository() {
   const entries = [entry];
   const repository: jest.Mocked<CalendarRepository> = {
     getEntries: jest.fn().mockResolvedValue(entries),
+    getEntry: jest.fn().mockResolvedValue(entry),
     createEntry: jest.fn().mockResolvedValue(entry),
     updateEntry: jest.fn().mockResolvedValue(entry),
     deleteEntry: jest.fn().mockResolvedValue(undefined),
@@ -35,6 +36,14 @@ describe('CalendarService', () => {
       '2026-10-05T00:00:00Z',
       '2026-10-06T00:00:00Z',
     );
+  });
+
+  it('passes an entry id to the repository read-by-id operation', async () => {
+    const { repository } = createRepository();
+    const service = new CalendarService(repository);
+
+    await expect(service.getEntry(entry.id)).resolves.toBe(entry);
+    expect(repository.getEntry).toHaveBeenCalledWith(entry.id);
   });
 
   it('passes the create input to the repository and returns its entry', async () => {

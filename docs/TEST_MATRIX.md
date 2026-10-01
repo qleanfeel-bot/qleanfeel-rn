@@ -6,21 +6,21 @@ Statuses describe the current repository unless a row is explicitly marked as fu
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| TypeScript (`npx tsc --noEmit`) | **PASSED** | Passed for the completed M3 implementation. |
-| ESLint (`npm run lint`) | **PASSED** | Passed for the completed M3 implementation. |
-| Documentation diff check (`git diff --check`) | **PASSED** | Passed after this documentation audit. |
+| TypeScript (`npx tsc --noEmit`) | **PASSED** | Passed for the completed M4 implementation. |
+| ESLint (`npm run lint`) | **PASSED** | Passed for the completed M4 implementation. |
+| Documentation/code diff check (`git diff --check`) | **PASSED** | Passed after the M4 implementation and documentation update. |
 
 ## Unit tests
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Jest (`npm test -- --ci`) | **PASSED — 20 suites / 182 tests** | Covers auth controller/UI, Profile UI/service, Calendar domain/service/UI/API, HTTP transport, and development compositions. Tests use fakes/in-memory handlers; no real Firebase/backend integration is covered. |
+| Jest (`npm test -- --runInBand`) | **PASSED — 28 suites / 262 tests** | Covers auth controller/UI, Profile UI/service, Calendar domain/service/UI/API, ManualOrder domain/service/API/UI, scheduled creation compensation, linked Calendar deletion protection, HTTP transport, and development compositions. Tests use fakes/in-memory handlers; no real Firebase/backend integration is covered. |
 
 ## Android build verification
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Debug APK (`./gradlew assembleDebug --no-daemon`) | **PASSED** | M3 Android debug build passed. A debug APK may require Metro for JavaScript during development. |
+| Debug APK (`./gradlew assembleDebug --no-daemon`) | **PASSED** | M4 Android debug build passed. A debug APK may require Metro for JavaScript during development. |
 | Release APK (`./gradlew assembleRelease --no-daemon`) | **IMPLEMENTED** | Built locally and in CI; uploaded as `qleanfeel-android-release-apk`. |
 
 ## Release artifact verification
@@ -36,6 +36,7 @@ Statuses describe the current repository unless a row is explicitly marked as fu
 | --- | --- | --- |
 | Install, launch, and exercise the M1 release APK on physical Android hardware | **IMPLEMENTED** | M1.9 physical-device verification completed successfully. The tested app used the in-memory development authentication composition, not Firebase/backend auth. |
 | Exercise the M3 Calendar flow on a physical Android device | **IMPLEMENTED** | Login → Profile → Calendar → seed entry → create → edit → delete → Profile → logout was manually verified using the development in-memory composition. |
+| Exercise the M4 Orders flow on a physical Android device | **PLANNED** | M4 was covered by automated UI/composition tests and an Android debug build; physical-device verification has not been recorded. |
 | Physical iOS device verification | **PLANNED** | No iOS device verification is recorded for M1. |
 | Hardware-dependent behavior | **PLANNED** | BLE, camera, microphone, background behavior, and device-specific behavior require real Android hardware when those features are implemented. Add explicit device checks to the relevant milestone. |
 
@@ -57,6 +58,10 @@ The following flow was manually verified on a physical Android device:
 10. Log out.
 
 The Profile/Calendar controls were checked after fixing the status-bar overlap. Calendar CRUD and logout were verified on the physical device. Calendar error/retry UI is covered by automated tests where applicable; deterministic manual failure injection was not established in M3. No production backend integration was tested.
+
+## M4 Automated Coverage
+
+ManualOrder domain validation, API request restrictions, DTO mapping, safe repository errors, in-memory handler CRUD reads, explicit HTTP routing, development composition, Calendar read-by-id, and scheduled creation compensation are covered by Jest tests. The authenticated UI tests cover Orders loading/empty/error/retry, validation, duplicate-submit blocking, create/list/details, linked Calendar scheduling, Profile/Calendar surface regressions, and logout. This is development composition coverage, not production backend or physical-device testing.
 
 ## Future integration tests
 
@@ -87,7 +92,7 @@ The mobile auth foundation and its boundary-level tests are implemented. These t
 | Real authentication restoration and provider sign-out | **PLANNED** | Controller behavior with fake ports is tested; restoration/logout against a real provider remains unverified. |
 | Backend 401/403 handling, user provisioning/bootstrap, and current-user retrieval | **PLANNED** | `POST /v1/auth/bootstrap` and `GET /v1/me` remain planned contracts; no backend or auth API implementation exists. Shared `HttpTransport` for Profile and Calendar does not connect to a live backend. |
 | Server authorization and resource ownership | **PLANNED** | No backend authorization or resource ownership implementation exists to test. |
-| M1.7 final test coverage | **IMPLEMENTED** | At M1 completion, 44 Jest tests passed across the four suites then present. The current full repository suite is 20 suites / 182 tests. Coverage uses fakes and does not claim real provider/backend integration. |
+| M1.7 final test coverage | **IMPLEMENTED** | At M1 completion, 44 Jest tests passed across the four suites then present. The current full repository suite is 28 suites / 262 tests. Coverage uses fakes and does not claim real provider/backend integration. |
 | M1.8 CI verification | **IMPLEMENTED** | CI is green for TypeScript, ESLint, Jest, Android debug/release builds, and debug/release APK artifacts. |
 | M1.9 release APK + physical-device verification | **IMPLEMENTED** | Release APK was installed and tested successfully on physical Android hardware using the development auth composition. This does not verify Firebase/backend auth or production signing. |
 

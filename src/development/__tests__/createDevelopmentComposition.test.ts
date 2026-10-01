@@ -51,4 +51,55 @@ describe('development calendar HTTP integration', () => {
     await expect(calendarService.deleteEntry(created.id)).resolves.toBeUndefined();
     await expect(calendarService.getEntries(from, to)).resolves.toEqual([]);
   });
+
+  it('reads a CalendarEntry by id through service, API repository, transport, and handler', async () => {
+    const { calendarService } = createDevelopmentComposition();
+    await expect(calendarService.getEntry('development-calendar-seed')).resolves.toMatchObject({
+      id: 'development-calendar-seed',
+      type: 'personal',
+    });
+    await expect(calendarService.getEntry('missing')).rejects.toEqual({ code: 'EntryNotFound' });
+  });
+});
+
+describe('development ManualOrder HTTP integration', () => {
+  it('creates a scheduled order, then reads the order and its separately stored CalendarEntry', async () => {
+    const { manualOrderService, createScheduledManualOrder, calendarService } = createDevelopmentComposition();
+    const created = await createScheduledManualOrder.execute({
+      customerName: 'Ivan',
+      serviceDescription: 'Apartment cleaning',
+      serviceAddress: 'Nevsky 25',
+      customerPhone: null,
+      quotedPrice: { amountMinor: 400000, currencyCode: 'RUB' },
+      notes: 'Call on arrival',
+      startAt: '2026-10-30T07:00:00Z',
+      endAt: '2026-10-30T09:00:00Z',
+    });
+
+    expect(created).toMatchObject({
+      id: 'development-manual-order-1',
+      customerName: 'Ivan',
+      serviceDescription: 'Apartment cleaning',
+      serviceAddress: 'Nevsky 25',
+      calendarEntryId: 'development-calendar-entry-1',
+      quotedPrice: { amountMinor: 400000, currencyCode: 'RUB' },
+    });
+    expect(created).not.toHaveProperty('startAt');
+    expect(created).not.toHaveProperty('endAt');
+    await expect(calendarService.getEntry(created.calendarEntryId)).resolves.toMatchObject({
+      type: 'external_order',
+      title: 'Apartment cleaning',
+      startAt: '2026-10-30T07:00:00Z',
+      endAt: '2026-10-30T09:00:00Z',
+    });
+    await expect(calendarService.deleteEntry(created.calendarEntryId))
+      .rejects.toEqual({ code: 'CalendarConflict' });
+    await expect(calendarService.getEntry(created.calendarEntryId)).resolves.toMatchObject({
+      id: created.calendarEntryId,
+      type: 'external_order',
+    });
+    await expect(manualOrderService.getOrders()).resolves.toEqual([created]);
+    await expect(manualOrderService.get(created.id)).resolves.toEqual(created);
+    await expect(manualOrderService.get('missing')).rejects.toEqual({ code: 'OrderNotFound' });
+  });
 });

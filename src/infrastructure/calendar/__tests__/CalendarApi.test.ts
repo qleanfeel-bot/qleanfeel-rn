@@ -35,6 +35,16 @@ describe('CalendarApi', () => {
     );
   });
 
+  it('gets one encoded entry by id', async () => {
+    const { api, fetchImplementation } = setup(200, entryDto);
+
+    await expect(api.getEntry('entry/123')).resolves.toEqual(entryDto);
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      'https://api.example/v1/me/calendar/entries/entry%2F123',
+      { method: 'GET', headers: { Accept: 'application/json' } },
+    );
+  });
+
   it('posts only the create request fields', async () => {
     const { api, fetchImplementation } = setup(201, entryDto);
     const body = {

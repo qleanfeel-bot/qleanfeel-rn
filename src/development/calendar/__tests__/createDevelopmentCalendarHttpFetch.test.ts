@@ -100,6 +100,32 @@ describe('development Calendar HTTP handler', () => {
     await expect(read(response)).resolves.toEqual({ entries: [] });
   });
 
+  it('reads an entry by id and returns ENTRY_NOT_FOUND for a missing id', async () => {
+    const handler = createDevelopmentCalendarHttpFetch();
+    const found = await send(handler, 'GET', `${COLLECTION}/${SEED_ID}`);
+    expect(found.status).toBe(200);
+    await expect(read(found)).resolves.toEqual(SEED_ENTRY);
+
+    const missing = await send(handler, 'GET', `${COLLECTION}/missing`);
+    expect(missing.status).toBe(404);
+    await expect(read(missing)).resolves.toMatchObject({ error: { code: 'ENTRY_NOT_FOUND' } });
+  });
+
+  it('rejects deleting a CalendarEntry referenced by a ManualOrder and preserves the entry', async () => {
+    const handler = createDevelopmentCalendarHttpFetch({
+      isManualOrderReference: entryId => entryId === SEED_ID,
+    });
+    const deletion = await send(handler, 'DELETE', `${COLLECTION}/${SEED_ID}`);
+
+    expect(deletion.status).toBe(409);
+    await expect(read(deletion)).resolves.toMatchObject({
+      error: { code: 'CALENDAR_CONFLICT' },
+    });
+    const stillPresent = await send(handler, 'GET', `${COLLECTION}/${SEED_ID}`);
+    expect(stillPresent.status).toBe(200);
+    await expect(read(stillPresent)).resolves.toEqual(SEED_ENTRY);
+  });
+
   it('creates an entry with a generated id and server-assigned scheduled status', async () => {
     const response = await send(createDevelopmentCalendarHttpFetch(), 'POST', COLLECTION, {
       startAt: '2026-10-06T07:00:00Z',

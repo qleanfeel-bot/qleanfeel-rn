@@ -69,3 +69,9 @@ This log records accepted decisions only. Proposed architecture principles are d
 - **Status:** Accepted
 - **File:** [docs/ADR-011-calendar.md](ADR-011-calendar.md)
 - **Decision:** Calendar is independent from Order, uses absolute UTC timestamps and half-open intervals, and defines the current-user API under `/v1/me/calendar/entries`. The client does not send `userId`; the backend resolves identity and ownership from authenticated context and must be authoritative for production data. The current development implementation uses in-memory HTTP and is not production persistence.
+
+## ADR-012 — ManualOrder and CalendarEntry Relationship
+
+- **Status:** Accepted
+- **File:** [docs/ADR-012-manual-orders.md](ADR-012-manual-orders.md)
+- **Decision:** ManualOrder and CalendarEntry are separate domain entities. ManualOrder stores a `calendarEntryId` reference and order details; CalendarEntry alone owns scheduling timestamps and Calendar status. M4 creates CalendarEntry and then ManualOrder through an application use case, with development-level compensating Calendar deletion if ManualOrder creation fails. This is not a transaction. Production persistence and transactional backend orchestration remain deferred.

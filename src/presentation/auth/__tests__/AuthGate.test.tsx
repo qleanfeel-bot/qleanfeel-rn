@@ -7,7 +7,10 @@ import type { AuthProviderAdapter } from '../../../application/auth/ports/AuthPr
 import type { Profile } from '../../../domain/profile/entities/Profile';
 import type { ProfileRepository } from '../../../domain/profile/repositories/ProfileRepository';
 import type { CalendarRepository } from '../../../domain/calendar/repositories/CalendarRepository';
+import type { ManualOrderRepository } from '../../../domain/manualOrder/repositories/ManualOrderRepository';
 import { CalendarService } from '../../../application/calendar/CalendarService';
+import { CreateScheduledManualOrder } from '../../../application/manualOrder/CreateScheduledManualOrder';
+import { ManualOrderService } from '../../../application/manualOrder/ManualOrderService';
 import { AuthStateController } from '../../../application/auth/AuthStateController';
 import { ProfileService } from '../../../application/profile/ProfileService';
 import { AuthenticatedAppShell } from '../AuthenticatedAppShell';
@@ -41,6 +44,9 @@ function createProfileService(): ProfileService {
 function createCalendarService(): CalendarService {
   const repository: CalendarRepository = {
     getEntries: jest.fn().mockResolvedValue([]),
+    getEntry: jest.fn(async () => {
+      throw new Error('not used in AuthGate tests');
+    }),
     createEntry: jest.fn(async () => {
       throw new Error('not used in AuthGate tests');
     }),
@@ -50,6 +56,19 @@ function createCalendarService(): CalendarService {
     deleteEntry: jest.fn().mockResolvedValue(undefined),
   };
   return new CalendarService(repository);
+}
+
+function createManualOrderService(): ManualOrderService {
+  const repository: ManualOrderRepository = {
+    getOrders: jest.fn().mockResolvedValue([]),
+    createOrder: jest.fn(async () => {
+      throw new Error('not used in AuthGate tests');
+    }),
+    getOrder: jest.fn(async () => {
+      throw new Error('not used in AuthGate tests');
+    }),
+  };
+  return new ManualOrderService(repository);
 }
 
 function createController() {
@@ -71,13 +90,16 @@ async function renderGate(
   controller: AuthStateController,
   profileService = createProfileService(),
   calendarService = createCalendarService(),
+  manualOrderService = createManualOrderService(),
 ) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(
       <AuthGate
         calendarService={calendarService}
+        createScheduledManualOrder={new CreateScheduledManualOrder(calendarService, manualOrderService)}
         controller={controller}
+        manualOrderService={manualOrderService}
         profileService={profileService}
       />,
     );

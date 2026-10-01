@@ -10,6 +10,7 @@ export type UpdateCalendarEntryChanges = Partial<CreateCalendarEntryInput>;
 /** Application-facing access to calendar entries. */
 export interface CalendarRepository {
   getEntries(from: string, to: string): Promise<CalendarEntry[]>;
+  getEntry(entryId: string): Promise<CalendarEntry>;
   createEntry(entry: CreateCalendarEntryInput): Promise<CalendarEntry>;
   updateEntry(entryId: string, changes: UpdateCalendarEntryChanges): Promise<CalendarEntry>;
   deleteEntry(entryId: string): Promise<void>;

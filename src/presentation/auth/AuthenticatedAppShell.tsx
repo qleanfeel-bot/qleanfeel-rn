@@ -1,23 +1,30 @@
 import React, { useState } from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import type { CalendarService } from '../../application/calendar/CalendarService';
+import type { CreateScheduledManualOrder } from '../../application/manualOrder/CreateScheduledManualOrder';
+import type { ManualOrderService } from '../../application/manualOrder/ManualOrderService';
 import type { ProfileService } from '../../application/profile/ProfileService';
 import type { UserStatus } from '../../domain/auth/entities/User';
 import { CalendarScreen } from '../calendar/CalendarScreen';
+import { ManualOrdersScreen } from '../manualOrder/ManualOrdersScreen';
 import { ProfileScreen } from '../profile/ProfileScreen';
 
 interface AuthenticatedAppShellProps {
   readonly calendarService: CalendarService;
+  readonly createScheduledManualOrder: CreateScheduledManualOrder;
+  readonly manualOrderService: ManualOrderService;
   readonly profileService: ProfileService;
   readonly userId: string;
   readonly accountStatus: UserStatus;
   readonly onLogout: () => void;
 }
 
-type ActiveSurface = 'profile' | 'calendar';
+type ActiveSurface = 'profile' | 'calendar' | 'orders';
 
 export function AuthenticatedAppShell({
   calendarService,
+  createScheduledManualOrder,
+  manualOrderService,
   profileService,
   userId,
   accountStatus,
@@ -44,6 +51,14 @@ export function AuthenticatedAppShell({
           testID="authenticated-shell-calendar-button">
           <Text style={styles.surfaceControlText}>Calendar</Text>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ selected: activeSurface === 'orders' }}
+          onPress={() => setActiveSurface('orders')}
+          style={styles.surfaceControl}
+          testID="authenticated-shell-orders-button">
+          <Text style={styles.surfaceControlText}>Orders</Text>
+        </Pressable>
       </View>
       <View style={styles.surface}>
         {activeSurface === 'profile' ? (
@@ -53,8 +68,14 @@ export function AuthenticatedAppShell({
             profileService={profileService}
             userId={userId}
           />
-        ) : (
+        ) : activeSurface === 'calendar' ? (
           <CalendarScreen calendarService={calendarService} />
+        ) : (
+          <ManualOrdersScreen
+            calendarService={calendarService}
+            createScheduledManualOrder={createScheduledManualOrder}
+            manualOrderService={manualOrderService}
+          />
         )}
       </View>
     </View>

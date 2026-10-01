@@ -1,8 +1,11 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { CalendarService } from '../../../application/calendar/CalendarService';
+import { CreateScheduledManualOrder } from '../../../application/manualOrder/CreateScheduledManualOrder';
+import { ManualOrderService } from '../../../application/manualOrder/ManualOrderService';
 import { ProfileService } from '../../../application/profile/ProfileService';
 import type { CalendarRepository } from '../../../domain/calendar/repositories/CalendarRepository';
+import type { ManualOrderRepository } from '../../../domain/manualOrder/repositories/ManualOrderRepository';
 import type { Profile } from '../../../domain/profile/entities/Profile';
 import type { ProfileRepository } from '../../../domain/profile/repositories/ProfileRepository';
 import { CalendarScreen } from '../../calendar/CalendarScreen';
@@ -30,6 +33,9 @@ function createProfileService(): ProfileService {
 function createCalendarService(): CalendarService {
   const repository: CalendarRepository = {
     getEntries: jest.fn().mockResolvedValue([]),
+    getEntry: jest.fn(async () => {
+      throw new Error('not used in shell tests');
+    }),
     createEntry: jest.fn(async () => {
       throw new Error('not used in shell tests');
     }),
@@ -41,9 +47,23 @@ function createCalendarService(): CalendarService {
   return new CalendarService(repository);
 }
 
+function createManualOrderService(): ManualOrderService {
+  const repository: ManualOrderRepository = {
+    getOrders: jest.fn().mockResolvedValue([]),
+    createOrder: jest.fn(async () => {
+      throw new Error('not used in shell tests');
+    }),
+    getOrder: jest.fn(async () => {
+      throw new Error('not used in shell tests');
+    }),
+  };
+  return new ManualOrderService(repository);
+}
+
 async function renderShell(
   profileService = createProfileService(),
   calendarService = createCalendarService(),
+  manualOrderService = createManualOrderService(),
   onLogout = jest.fn(),
 ) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -52,13 +72,15 @@ async function renderShell(
       <AuthenticatedAppShell
         accountStatus="active"
         calendarService={calendarService}
+        createScheduledManualOrder={new CreateScheduledManualOrder(calendarService, manualOrderService)}
+        manualOrderService={manualOrderService}
         onLogout={onLogout}
         profileService={profileService}
         userId="user-1"
       />,
     );
   });
-  return { renderer, profileService, calendarService, onLogout };
+  return { renderer, profileService, calendarService, manualOrderService, onLogout };
 }
 
 async function press(renderer: ReactTestRenderer.ReactTestRenderer, testID: string) {
@@ -86,6 +108,16 @@ describe('AuthenticatedAppShell', () => {
     expect(renderer.root.findByType(CalendarScreen).props.calendarService).toBe(calendarService);
     expect(renderer.root.findAllByType(ProfileScreen)).toHaveLength(0);
     expect(renderer.root.findByProps({ testID: 'authenticated-shell-calendar-button' })
+      .props.accessibilityState).toEqual({ selected: true });
+  });
+
+  it('switches to Orders using the supplied ManualOrder dependencies', async () => {
+    const { renderer } = await renderShell();
+
+    await press(renderer, 'authenticated-shell-orders-button');
+
+    expect(renderer.root.findByProps({ testID: 'manual-orders-screen' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'authenticated-shell-orders-button' })
       .props.accessibilityState).toEqual({ selected: true });
   });
 

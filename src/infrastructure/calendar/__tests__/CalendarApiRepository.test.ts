@@ -18,6 +18,7 @@ const entry: CalendarEntry = { ...entryDto, type: 'external_order', status: 'sch
 function createApi() {
   const api = {
     getEntries: jest.fn().mockResolvedValue({ entries: [entryDto] }),
+    getEntry: jest.fn().mockResolvedValue(entryDto),
     createEntry: jest.fn().mockResolvedValue(entryDto),
     updateEntry: jest.fn().mockResolvedValue(entryDto),
     deleteEntry: jest.fn().mockResolvedValue(undefined),
@@ -34,6 +35,12 @@ describe('CalendarApiRepository', () => {
     expect(api.getEntries).toHaveBeenCalledWith('2026-10-05T00:00:00Z', '2026-10-06T00:00:00Z');
     expect(result).toEqual([entry]);
     expect(result[0]).not.toBe(entryDto);
+  });
+
+  it('reads and maps a single entry by id', async () => {
+    const api = createApi();
+    await expect(new CalendarApiRepository(api).getEntry('entry-123')).resolves.toEqual(entry);
+    expect(api.getEntry).toHaveBeenCalledWith('entry-123');
   });
 
   it('maps create input to the permitted DTO and maps the response to a domain entry', async () => {
@@ -110,6 +117,13 @@ describe('CalendarApiRepository', () => {
 
     await expect(new CalendarApiRepository(api).getEntries('from', 'to'))
       .rejects.toEqual({ code: 'UnexpectedResponse' });
+  });
+
+  it('maps a read-by-id 404 to EntryNotFound', async () => {
+    const api = createApi();
+    api.getEntry.mockRejectedValueOnce(new HttpError('NotFound'));
+    await expect(new CalendarApiRepository(api).getEntry('missing'))
+      .rejects.toEqual({ code: 'EntryNotFound' });
   });
 
   it('converts malformed API entries to a safe error without returning DTOs', async () => {
