@@ -2,12 +2,23 @@
 
 ## Current state — IMPLEMENTED
 
-- The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated Profile surface.
+- The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated shell.
+- After authentication, the current app structure is:
+
+  ```text
+  Auth
+    ↓
+  Authenticated shell
+    ├── Profile
+    └── Calendar
+  ```
+
+  The shell switches between Profile and Calendar using local React state. React Navigation is not currently used; adding a full navigation library is a separate decision if the screen count grows enough to require it.
 - Android and iOS native project shells are present. Both use the application/bundle identifier `com.qleanfeel.app`.
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
 - The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
-- M1's authentication test suites historically had 44 passing tests. The current full Jest suite has 90 passing tests across M1, M2, and infrastructure tests. These suites exercise domain/application and presentation behavior with fakes; they are not real provider/backend integration tests.
+- The current Jest suite has 20 suites and 182 tests. Tests exercise domain/application and presentation behavior with fakes and development in-memory handlers; they are not real provider/backend integration tests.
 - The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
@@ -82,9 +93,9 @@ AuthProviderAdapter / AuthApi ports
 future provider adapter / backend API implementation
 ```
 
-`AuthStateController` owns application authentication state and coordinates restoration, OTP request/verification, and logout through the ports. Provider failures are represented with provider-independent auth error codes. No Firebase adapter, concrete provider implementation, or HTTP/API client currently exists.
+`AuthStateController` owns application authentication state and coordinates restoration, OTP request/verification, and logout through the ports. Provider failures are represented with provider-independent auth error codes. No Firebase adapter or concrete auth provider/backend implementation exists. Shared `HttpTransport` is implemented for Profile and Calendar APIs but does not connect to a production backend.
 
-`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or the authenticated `ProfileScreen`. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and preserves the existing logout action. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
+`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or `AuthenticatedAppShell`. The shell locally switches between `ProfileScreen` and `CalendarScreen`. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and provides logout. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
 
 Firebase is planned as the first provider but is not integrated. Backend authentication/API is planned; `POST /v1/auth/bootstrap` and `GET /v1/me` do not exist. No production credential persistence or production signing is configured.
 
@@ -124,13 +135,15 @@ The authenticated request boundary is separate from authentication state and pro
 
 ```text
 ProfileScreen → ProfileService → ProfileRepository
-  → ProfileApiRepository → ProfileApi → HttpTransport → Qleanfeel backend
+  → ProfileApiRepository → ProfileApi → HttpTransport
 AccessTokenProvider → HttpTransport
 ```
 
+The current development composition connects `HttpTransport` to an in-memory HTTP handler. A production backend is not implemented.
+
 `AccessTokenProvider` only supplies an opaque API access token. It does not manage login/logout or retain User/AuthState. It is distinct from `ProviderCredential`, which the auth flow passes to `AuthApi`. No Firebase adapter, token refresh, production credential persistence, or production backend URL is implemented.
 
-Both endpoints require an authenticated request. The caller's identity is resolved by the backend from the trusted authentication context; the client does not select a profile using a `userId` path, query, or request-body field. `ProfileRepository` retains its `userId` argument for application consistency; the API always calls `/v1/me/profile`, and a response whose `profile.userId` differs from the requested ID is rejected. M2.5 adds the token-provider boundary and HTTP implementation but does not implement production authentication, token storage, or refresh behavior.
+Both endpoints require an authenticated request. The caller's identity is resolved by the backend from the trusted authentication context; the client does not select a profile using a `userId` path, query, or request-body field. `ProfileRepository` retains its `userId` argument for application consistency; the API always calls `/v1/me/profile`, and a response whose `profile.userId` differs from the requested ID is rejected. M2.5 established the token-provider boundary and HTTP implementation but did not implement production authentication, token storage, or refresh behavior.
 
 #### `GET /v1/me/profile` — CONTRACT IMPLEMENTED CLIENT-SIDE; BACKEND PLANNED
 
@@ -176,6 +189,37 @@ Profile endpoint errors use a small JSON envelope with a stable code and a safe 
 ```
 
 The minimum categories are `401 Unauthorized` / `UNAUTHORIZED` for absent or invalid authentication, `403 Forbidden` / `FORBIDDEN` when an authenticated request is not permitted, `404 Not Found` / `PROFILE_NOT_FOUND` when the current user's Profile is absent, `400 Bad Request` / `VALIDATION_ERROR` for an invalid display name, and `500 Internal Server Error` / `INTERNAL_ERROR` for an unexpected server failure. Error messages must not expose stack traces or internal details. These endpoint-specific statuses do not define a universal `403` versus `404` policy for other resources.
+
+### Calendar — MOBILE UI, DOMAIN, API BOUNDARIES, AND DEVELOPMENT CHAIN IMPLEMENTED; PRODUCTION BACKEND ABSENT
+
+The Calendar domain and UI are implemented behind provider-independent application and repository boundaries. The current chain is:
+
+```text
+CalendarScreen
+  → CalendarService
+  → CalendarRepository
+  → CalendarApiRepository
+  → CalendarApi
+  → HttpTransport
+  → development in-memory HTTP handler
+```
+
+The production backend and persistent Calendar storage do not exist yet. The in-memory handler is a development implementation of the HTTP boundary.
+
+`CalendarEntry` contains `id`, `startAt`, `endAt`, `type`, `status`, and `title`. `startAt` and `endAt` are absolute UTC ISO-8601 timestamps and must satisfy `startAt < endAt`. Calendar intervals use half-open semantics `[startAt, endAt)`. Initial types are `external_order`, `blocked`, and `personal`; statuses are `scheduled`, `cancelled`, and `completed`.
+
+The server assigns `id` and owns `status`. The client does not send `userId` or ownership information. Backend ownership and authentication must be determined from the authenticated identity; client-provided identity is not authoritative.
+
+The Calendar API contract in [ADR-011](ADR-011-calendar.md) is:
+
+```text
+GET    /v1/me/calendar/entries?from=<ISO-8601>&to=<ISO-8601>
+POST   /v1/me/calendar/entries
+PATCH  /v1/me/calendar/entries/{entryId}
+DELETE /v1/me/calendar/entries/{entryId}
+```
+
+For GET, both range bounds are required, `from < to`, and an entry is returned when `entry.startAt < to && from < entry.endAt`. The endpoints are contracts exercised by the development handler; they do not imply an existing production API or persistence layer.
 
 ### Future Web3 compatibility — FUTURE
 
