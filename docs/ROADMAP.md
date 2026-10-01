@@ -9,8 +9,8 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M0 — Foundation | React Native project initialized; Android/iOS identifiers normalized; basic project validation; debug build; CI; standalone Android release build | **COMPLETE** |
 | M0.5 — Project Governance | Project documentation; architecture rules; decision log; test matrix; remote-first development workflow | **COMPLETE** |
 | M1 — Authentication | Provider-independent mobile authentication foundation, tests, CI, and release/device verification | **COMPLETE** |
-| M2 — User/Profile | User profile and account information | **IN PROGRESS** |
-| M3 — Calendar | Calendar and scheduling workflows | **PLANNED** |
+| M2 — User/Profile | User profile, display-name editing, and client-side API boundaries | **COMPLETE** |
+| M3 — Calendar | Calendar and scheduling workflows using the development in-memory HTTP composition | **COMPLETE** |
 | M4 — Manual Orders | Manual order workflows | **PLANNED** |
 | M5 — Evidence | Evidence capture and handling | **PLANNED** |
 | M6 — Emergency | Emergency workflows | **PLANNED** |
@@ -21,9 +21,9 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M11 — Security hardening | Security review and hardening | **PLANNED** |
 | M12 — Production release preparation | Production readiness and release preparation | **PLANNED** |
 
-M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M2–M12 remain planned and are not claims of existing functionality or settled implementation details.
+M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M4–M12 remain planned and are not claims of existing functionality or settled implementation details.
 
-M2.1–M2.4 profile domain, UI/editing flow, and API contract are implemented. M2.5 adds the provider-independent HTTP/API infrastructure, access-token port, safe error mapping, and a fully local development chain. No real backend integration is claimed.
+M2.1–M2.5 are complete: Profile domain, UI/editing flow, API contract, provider-independent HTTP/API infrastructure, access-token port, safe error mapping, and local development composition are implemented. No real backend integration is claimed.
 
 ### M1 — Authentication decomposition
 
@@ -52,7 +52,21 @@ M1.0 through M1.9 are complete. The completed release/device verification used t
 | M2.2 — Profile UI | Authenticated profile view and safe states | **COMPLETE** |
 | M2.3 — Profile editing | Edit display name through ProfileService | **COMPLETE** |
 | M2.4 — Backend API contract | Define current-user GET/PATCH contract and safe error categories | **COMPLETE** |
-| M2.5 — Real Profile Integration boundaries | HTTP/API/repository infrastructure, AccessTokenProvider port, development composition, and tests; live backend/provider remain future work | **IN PROGRESS** |
+| M2.5 — Profile HTTP/API boundaries and development composition | HTTP/API/repository infrastructure, AccessTokenProvider port, development composition, and tests; live backend/provider remain future work | **COMPLETE** |
+
+### M3 — Calendar / Scheduling decomposition
+
+| Sub-milestone | Scope | Status |
+| --- | --- | --- |
+| M3.0 — Calendar architecture/API contract | Calendar model, time semantics, boundaries, and API contract recorded in ADR-011 | **COMPLETE** |
+| M3.1 — Calendar domain | CalendarEntry model, validation, and repository contract | **COMPLETE** |
+| M3.2 — Repository/application service | CalendarApiRepository boundary and CalendarService operations | **COMPLETE** |
+| M3.3 — HTTP/API infrastructure | CalendarApi and shared HttpTransport integration | **COMPLETE** |
+| M3.4 — Development HTTP composition | In-memory development HTTP handler and application composition | **COMPLETE** |
+| M3.5 — Calendar UI and authenticated shell | Calendar CRUD UI and local Profile/Calendar shell controls | **COMPLETE** |
+| M3.5d/e — Android verification and UI polish | Physical-device flow verification and status-bar overlap/UI adjustments | **COMPLETE** |
+
+M3 uses a development in-memory HTTP implementation. It verifies the mobile API boundary and UI flow but does not provide production backend persistence. Production backend integration is a separate engineering concern; its exact scope and milestone number will be determined by a separate architecture decision. This does not change the existing M4 name or the numbering of future milestones.
 
 `POST /v1/auth/bootstrap` and `GET /v1/me` are planned contracts only; neither endpoint exists yet. Firebase Authentication is the planned first provider, not an existing integration.
 

@@ -63,3 +63,9 @@ This log records accepted decisions only. Proposed architecture principles are d
 - **Decision:** Profile data access remains provider-independent through `ProfileRepository`. Concrete infrastructure communicates with the backend through HTTP/API boundaries. Authenticated API requests obtain an opaque access token through the application-level `AccessTokenProvider` port. Profile Domain/Application do not know HTTP, Firebase, bearer tokens, API URLs, or provider SDKs.
 - **Identity rule:** The `userId` passed to `ProfileRepository` is a consistency expectation only; it is not authorization authority for `/v1/me/profile`. The backend resolves the caller from authenticated context. The client does not put that `userId` in the `/me` URL or request body. A mismatched returned identity is rejected as a safe infrastructure error.
 - **Development:** The local composition exercises the same ProfileService → ProfileApiRepository → ProfileApi → HttpTransport chain using a development-only token provider and in-memory HTTP handler. It does not connect to a real backend or implement production authentication/token refresh.
+
+## ADR-011 — Calendar / Scheduling Model, Semantics and API Contract
+
+- **Status:** Accepted
+- **File:** [docs/ADR-011-calendar.md](ADR-011-calendar.md)
+- **Decision:** Calendar is independent from Order, uses absolute UTC timestamps and half-open intervals, and defines the current-user API under `/v1/me/calendar/entries`. The client does not send `userId`; the backend resolves identity and ownership from authenticated context and must be authoritative for production data. The current development implementation uses in-memory HTTP and is not production persistence.
