@@ -16,8 +16,16 @@ type CalendarErrorCode =
 
 type CalendarErrorStatus = 400 | 401 | 403 | 404 | 409 | 500;
 
+export interface DevelopmentCalendarHttpFetchOptions {
+  readonly isManualOrderReference: (entryId: string) => boolean;
+  readonly onEntryCreated: (entryId: string) => void;
+  readonly onEntryDeleted: (entryId: string) => void;
+}
+
 /** Development-only in-memory handler for the Calendar HTTP API. */
-export function createDevelopmentCalendarHttpFetch(): HttpFetch {
+export function createDevelopmentCalendarHttpFetch(
+  options: Partial<DevelopmentCalendarHttpFetchOptions> = {},
+): HttpFetch {
   const seed = createCalendarEntry({
     id: 'development-calendar-seed',
     startAt: '2026-10-05T07:00:00Z',
@@ -28,6 +36,7 @@ export function createDevelopmentCalendarHttpFetch(): HttpFetch {
   });
   const entries = new Map<string, CalendarEntry>([[seed.id, seed]]);
   let nextEntryId = 1;
+  options.onEntryCreated?.(seed.id);
 
   return async (url, init) => {
     try {
@@ -60,6 +69,7 @@ export function createDevelopmentCalendarHttpFetch(): HttpFetch {
           return errorResponse(400, 'VALIDATION_ERROR');
         }
         entries.set(created.id, created);
+        options.onEntryCreated?.(created.id);
         nextEntryId += 1;
         return response(201, created);
       }
@@ -69,6 +79,14 @@ export function createDevelopmentCalendarHttpFetch(): HttpFetch {
           entryId = decodeURIComponent(encodedEntryId);
         } catch {
           return errorResponse(404, 'ENTRY_NOT_FOUND');
+        }
+
+        if (init.method === 'GET') {
+          if (query) {
+            return errorResponse(400, 'VALIDATION_ERROR');
+          }
+          const entry = entries.get(entryId);
+          return entry ? response(200, entry) : errorResponse(404, 'ENTRY_NOT_FOUND');
         }
 
         if (init.method === 'PATCH') {
@@ -81,9 +99,13 @@ export function createDevelopmentCalendarHttpFetch(): HttpFetch {
           if (query) {
             return errorResponse(400, 'VALIDATION_ERROR');
           }
+          if (options.isManualOrderReference?.(entryId)) {
+            return errorResponse(409, 'CALENDAR_CONFLICT');
+          }
           if (!entries.delete(entryId)) {
             return errorResponse(404, 'ENTRY_NOT_FOUND');
           }
+          options.onEntryDeleted?.(entryId);
           return response(204);
         }
       }

@@ -25,6 +25,14 @@ export class CalendarApiRepository implements CalendarRepository {
     }
   }
 
+  public async getEntry(entryId: string): Promise<CalendarEntry> {
+    try {
+      return calendarEntryFromDto(await this.api.getEntry(entryId));
+    } catch (error) {
+      throw toRepositoryError(error, true);
+    }
+  }
+
   public async createEntry(entry: CreateCalendarEntryInput): Promise<CalendarEntry> {
     try {
       const request = calendarEntryCreateRequestFromInput(entry);

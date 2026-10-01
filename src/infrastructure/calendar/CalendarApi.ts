@@ -19,6 +19,14 @@ export class CalendarApi {
     });
   }
 
+  public getEntry(entryId: string): Promise<CalendarEntryDto> {
+    return this.transport.request<CalendarEntryDto>({
+      method: 'GET',
+      path: `/v1/me/calendar/entries/${encodeURIComponent(entryId)}`,
+      authenticated: true,
+    });
+  }
+
   public createEntry(body: CalendarEntryCreateRequestDto): Promise<CalendarEntryDto> {
     return this.transport.request<CalendarEntryDto>({
       method: 'POST',

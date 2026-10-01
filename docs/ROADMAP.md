@@ -11,7 +11,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M1 — Authentication | Provider-independent mobile authentication foundation, tests, CI, and release/device verification | **COMPLETE** |
 | M2 — User/Profile | User profile, display-name editing, and client-side API boundaries | **COMPLETE** |
 | M3 — Calendar | Calendar and scheduling workflows using the development in-memory HTTP composition | **COMPLETE** |
-| M4 — Manual Orders | Manual order workflows | **PLANNED** |
+| M4 — Manual Orders | Manual order create/list/details flow, linked Calendar scheduling, and development HTTP composition | **COMPLETE** |
 | M5 — Evidence | Evidence capture and handling | **PLANNED** |
 | M6 — Emergency | Emergency workflows | **PLANNED** |
 | M7 — Finance | Finance workflows | **PLANNED** |
@@ -21,7 +21,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M11 — Security hardening | Security review and hardening | **PLANNED** |
 | M12 — Production release preparation | Production readiness and release preparation | **PLANNED** |
 
-M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M4–M12 remain planned and are not claims of existing functionality or settled implementation details.
+M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M5–M12 remain planned and are not claims of existing functionality or settled implementation details.
 
 M2.1–M2.5 are complete: Profile domain, UI/editing flow, API contract, provider-independent HTTP/API infrastructure, access-token port, safe error mapping, and local development composition are implemented. No real backend integration is claimed.
 
@@ -67,6 +67,19 @@ M1.0 through M1.9 are complete. The completed release/device verification used t
 | M3.5d/e — Android verification and UI polish | Physical-device flow verification and status-bar overlap/UI adjustments | **COMPLETE** |
 
 M3 uses a development in-memory HTTP implementation. It verifies the mobile API boundary and UI flow but does not provide production backend persistence. Production backend integration is a separate engineering concern; its exact scope and milestone number will be determined by a separate architecture decision. This does not change the existing M4 name or the numbering of future milestones.
+
+### M4 — Manual Orders decomposition
+
+| Sub-milestone | Scope | Status |
+| --- | --- | --- |
+| M4.0 — ManualOrder / CalendarEntry relationship | Separate domain entities, one-way `calendarEntryId` reference, and scheduling ownership recorded in ADR-012 | **COMPLETE** |
+| M4.1 — ManualOrder domain and application | Validated ManualOrder entity, repository/service contracts, and scheduled creation coordinator | **COMPLETE** |
+| M4.2 — HTTP/API and development composition | Authenticated collection/create/item API boundaries and in-memory development handler | **COMPLETE** |
+| M4.3 — Calendar read-by-id | Add `GET /v1/me/calendar/entries/{entryId}` without changing Calendar semantics | **COMPLETE** |
+| M4.4 — Orders UI | Authenticated Orders surface, create form, list, and details | **COMPLETE** |
+| M4.5 — Verification | Domain/API/handler/orchestration/UI tests, static checks, and Android debug build | **COMPLETE** |
+
+M4 uses a development in-memory HTTP implementation only. `ManualOrder` stores a `calendarEntryId`; `CalendarEntry` owns `startAt`, `endAt`, and Calendar status. The application creates CalendarEntry first and compensates with Calendar delete if ManualOrder creation fails. This is client/application-level compensation, not a transaction. Production persistence and transactional backend orchestration remain future work.
 
 `POST /v1/auth/bootstrap` and `GET /v1/me` are planned contracts only; neither endpoint exists yet. Firebase Authentication is the planned first provider, not an existing integration.
 

@@ -13,6 +13,10 @@ export class CalendarService {
     return this.calendar.getEntries(from, to);
   }
 
+  public getEntry(entryId: string): Promise<CalendarEntry> {
+    return this.calendar.getEntry(entryId);
+  }
+
   public createEntry(entry: CreateCalendarEntryInput): Promise<CalendarEntry> {
     return this.calendar.createEntry(entry);
   }

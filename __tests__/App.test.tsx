@@ -82,4 +82,40 @@ test('development composition exercises OTP and authenticated UI without exposin
   });
 
   expect(renderer.root.findByProps({testID: 'profile-screen'})).toBeTruthy();
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'authenticated-shell-orders-button'}).props.onPress();
+  });
+  expect(renderer.root.findByProps({testID: 'manual-orders-empty'})).toBeTruthy();
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'manual-orders-add-button'}).props.onPress();
+  });
+  for (const [testID, value] of [
+    ['manual-order-customer-input', 'Ivan'],
+    ['manual-order-service-input', 'Apartment cleaning'],
+    ['manual-order-address-input', 'Nevsky 25'],
+  ]) {
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({testID}).props.onChangeText(value);
+    });
+  }
+  await ReactTestRenderer.act(async () => {
+    await renderer.root.findByProps({testID: 'manual-order-save-button'}).props.onPress();
+  });
+  expect(renderer.root.findByProps({testID: 'manual-order-development-manual-order-1'})).toBeTruthy();
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'manual-order-development-manual-order-1'}).props.onPress();
+  });
+  expect(renderer.root.findByProps({testID: 'manual-order-details-loaded'})).toBeTruthy();
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'manual-order-details-back'}).props.onPress();
+    renderer.root.findByProps({testID: 'authenticated-shell-profile-button'}).props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID: 'logout-button'}).props.onPress();
+  });
+  expect(renderer.root.findByProps({testID: 'login-screen'})).toBeTruthy();
 });

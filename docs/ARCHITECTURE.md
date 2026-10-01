@@ -10,15 +10,16 @@
     ↓
   Authenticated shell
     ├── Profile
-    └── Calendar
+    ├── Calendar
+    └── Orders
   ```
 
-  The shell switches between Profile and Calendar using local React state. React Navigation is not currently used; adding a full navigation library is a separate decision if the screen count grows enough to require it.
+  The shell switches between Profile, Calendar, and Orders using local React state. React Navigation is not currently used; adding a full navigation library is a separate decision if the screen count grows enough to require it.
 - Android and iOS native project shells are present. Both use the application/bundle identifier `com.qleanfeel.app`.
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
 - The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
-- The current Jest suite has 20 suites and 182 tests. Tests exercise domain/application and presentation behavior with fakes and development in-memory handlers; they are not real provider/backend integration tests.
+- The current Jest suite has 28 suites and 262 tests. Tests exercise domain/application and presentation behavior with fakes and development in-memory handlers; they are not real provider/backend integration tests.
 - The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
@@ -95,7 +96,7 @@ future provider adapter / backend API implementation
 
 `AuthStateController` owns application authentication state and coordinates restoration, OTP request/verification, and logout through the ports. Provider failures are represented with provider-independent auth error codes. No Firebase adapter or concrete auth provider/backend implementation exists. Shared `HttpTransport` is implemented for Profile and Calendar APIs but does not connect to a production backend.
 
-`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or `AuthenticatedAppShell`. The shell locally switches between `ProfileScreen` and `CalendarScreen`. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and provides logout. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
+`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or `AuthenticatedAppShell`. The shell locally switches between `ProfileScreen`, `CalendarScreen`, and `ManualOrdersScreen`. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and provides logout. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
 
 Firebase is planned as the first provider but is not integrated. Backend authentication/API is planned; `POST /v1/auth/bootstrap` and `GET /v1/me` do not exist. No production credential persistence or production signing is configured.
 
@@ -214,12 +215,43 @@ The Calendar API contract in [ADR-011](ADR-011-calendar.md) is:
 
 ```text
 GET    /v1/me/calendar/entries?from=<ISO-8601>&to=<ISO-8601>
+GET    /v1/me/calendar/entries/{entryId}
 POST   /v1/me/calendar/entries
 PATCH  /v1/me/calendar/entries/{entryId}
 DELETE /v1/me/calendar/entries/{entryId}
 ```
 
 For GET, both range bounds are required, `from < to`, and an entry is returned when `entry.startAt < to && from < entry.endAt`. The endpoints are contracts exercised by the development handler; they do not imply an existing production API or persistence layer.
+
+### Manual Orders — MOBILE DOMAIN, API BOUNDARIES, DEVELOPMENT COMPOSITION, AND UI IMPLEMENTED; PRODUCTION BACKEND ABSENT
+
+ManualOrder is a separate domain entity from CalendarEntry. It owns customer and service snapshots, address, optional phone/quoted price/notes, its server-assigned `id` and `createdAt`, and a `calendarEntryId` reference. It does not contain `startAt`, `endAt`, `userId`, or an Order status. Client create requests do not contain server-owned IDs, timestamps, user identity, or status.
+
+CalendarEntry remains the scheduling boundary and owns `startAt`, `endAt`, `type`, `status`, and `title`. M4 does not add `orderId` to CalendarEntry. Order Details loads the ManualOrder and then fetches its associated CalendarEntry by ID.
+
+The current ManualOrder chain is:
+
+```text
+ManualOrdersScreen
+  → ManualOrderService
+  → ManualOrderRepository
+  → ManualOrderApiRepository
+  → ManualOrderApi
+  → HttpTransport
+  → development in-memory HTTP handler
+```
+
+The current authenticated Orders API contract is:
+
+```text
+GET  /v1/me/manual-orders
+POST /v1/me/manual-orders
+GET  /v1/me/manual-orders/{orderId}
+```
+
+`CreateScheduledManualOrder` coordinates Calendar creation and ManualOrder creation through the existing application services. If ManualOrder creation fails after Calendar creation, it attempts to delete the newly created CalendarEntry and propagates the original failure. If compensation also fails, it returns a safe compensation error. This is development/application-level compensation, not a transaction; production transactional orchestration and persistent storage are not implemented.
+
+The development HTTP router explicitly sends `/v1/me/manual-orders` requests to the in-memory ManualOrder handler. ManualOrder and Calendar state are process-local and are lost when the development composition is recreated. No real backend, database, or production persistence is present.
 
 ### Future Web3 compatibility — FUTURE
 

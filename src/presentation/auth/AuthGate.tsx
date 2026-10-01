@@ -3,19 +3,25 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import type { AuthState } from '../../application/auth/AuthState';
 import type { AuthStateController } from '../../application/auth/AuthStateController';
 import type { CalendarService } from '../../application/calendar/CalendarService';
+import type { CreateScheduledManualOrder } from '../../application/manualOrder/CreateScheduledManualOrder';
+import type { ManualOrderService } from '../../application/manualOrder/ManualOrderService';
 import type { ProfileService } from '../../application/profile/ProfileService';
 import { LoginScreen } from './LoginScreen';
 import { AuthenticatedAppShell } from './AuthenticatedAppShell';
 
 interface AuthGateProps {
   readonly calendarService: CalendarService;
+  readonly createScheduledManualOrder: CreateScheduledManualOrder;
   readonly controller: AuthStateController;
+  readonly manualOrderService: ManualOrderService;
   readonly profileService: ProfileService;
 }
 
 export function AuthGate({
   calendarService,
+  createScheduledManualOrder,
   controller,
+  manualOrderService,
   profileService,
 }: AuthGateProps): React.JSX.Element {
   const [authState, setAuthState] = useState<AuthState>(controller.state);
@@ -57,6 +63,8 @@ export function AuthGate({
         <View style={styles.authenticated} testID="auth-gate-authenticated">
           <AuthenticatedAppShell
             calendarService={calendarService}
+            createScheduledManualOrder={createScheduledManualOrder}
+            manualOrderService={manualOrderService}
             onLogout={() => {
               controller.logout().catch(() => undefined);
             }}

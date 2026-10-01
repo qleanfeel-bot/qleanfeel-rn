@@ -20,6 +20,13 @@ function createCalendarService(initialEntries: CalendarEntry[] = []) {
   let nextId = 1;
   const repository: jest.Mocked<CalendarRepository> = {
     getEntries: jest.fn(async (_from: string, _to: string) => [...storedEntries]),
+    getEntry: jest.fn(async entryId => {
+      const found = storedEntries.find(candidate => candidate.id === entryId);
+      if (!found) {
+        throw new Error('entry not found');
+      }
+      return found;
+    }),
     createEntry: jest.fn(async input => {
       const created = createCalendarEntry({
         id: `created-${nextId}`,
