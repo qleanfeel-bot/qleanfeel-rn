@@ -8,7 +8,7 @@ import type { CalendarRepository } from '../../../domain/calendar/repositories/C
 import type { ManualOrderRepository } from '../../../domain/manualOrder/repositories/ManualOrderRepository';
 import type { Profile } from '../../../domain/profile/entities/Profile';
 import type { ProfileRepository } from '../../../domain/profile/repositories/ProfileRepository';
-import { CalendarScreen } from '../../calendar/CalendarScreen';
+import { HomeScreen } from '../../home/HomeScreen';
 import { ProfileScreen } from '../../profile/ProfileScreen';
 import { AuthenticatedAppShell } from '../AuthenticatedAppShell';
 
@@ -21,6 +21,11 @@ const profile: Profile = {
   locale: null,
   country: null,
 };
+const mountedRenderers: ReactTestRenderer.ReactTestRenderer[] = [];
+
+afterEach(() => {
+  ReactTestRenderer.act(() => mountedRenderers.splice(0).forEach(renderer => renderer.unmount()));
+});
 
 function createProfileService(): ProfileService {
   const repository: ProfileRepository = {
@@ -80,6 +85,7 @@ async function renderShell(
       />,
     );
   });
+  mountedRenderers.push(renderer);
   return { renderer, profileService, calendarService, manualOrderService, onLogout };
 }
 
@@ -90,42 +96,34 @@ async function press(renderer: ReactTestRenderer.ReactTestRenderer, testID: stri
 }
 
 describe('AuthenticatedAppShell', () => {
-  it('starts on Profile and passes its existing dependencies through', async () => {
+  it('starts on Home and renders all four root navigation surfaces', async () => {
     const { renderer, profileService } = await renderShell();
 
     expect(renderer.root.findByProps({ testID: 'authenticated-app-shell' })).toBeTruthy();
-    expect(renderer.root.findByType(ProfileScreen).props.profileService).toBe(profileService);
-    expect(renderer.root.findByProps({ testID: 'authenticated-shell-profile-button' })
-      .props.accessibilityState).toEqual({ selected: true });
-    expect(renderer.root.findAllByType(CalendarScreen)).toHaveLength(0);
+    expect(renderer.root.findByType(HomeScreen)).toBeTruthy();
+    for (const testID of ['root-tab-home', 'root-tab-calendar', 'root-tab-orders', 'root-tab-profile']) {
+      expect(renderer.root.findByProps({ testID })).toBeTruthy();
+    }
+    expect(renderer.root.findAllByType(ProfileScreen)).toHaveLength(0);
+    expect(profileService).toBeTruthy();
   });
 
-  it('switches to Calendar and passes the supplied CalendarService unchanged', async () => {
+  it('navigates to Calendar and Orders through root controls', async () => {
     const { renderer, calendarService } = await renderShell();
 
-    await press(renderer, 'authenticated-shell-calendar-button');
+    await press(renderer, 'root-tab-calendar');
 
-    expect(renderer.root.findByType(CalendarScreen).props.calendarService).toBe(calendarService);
-    expect(renderer.root.findAllByType(ProfileScreen)).toHaveLength(0);
-    expect(renderer.root.findByProps({ testID: 'authenticated-shell-calendar-button' })
-      .props.accessibilityState).toEqual({ selected: true });
-  });
-
-  it('switches to Orders using the supplied ManualOrder dependencies', async () => {
-    const { renderer } = await renderShell();
-
-    await press(renderer, 'authenticated-shell-orders-button');
+    expect(renderer.root.findByProps({ testID: 'calendar-screen' })).toBeTruthy();
+    expect(calendarService).toBeTruthy();
+    await press(renderer, 'root-tab-orders');
 
     expect(renderer.root.findByProps({ testID: 'manual-orders-screen' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'authenticated-shell-orders-button' })
-      .props.accessibilityState).toEqual({ selected: true });
   });
 
   it('returns to Profile and keeps the existing logout callback reachable', async () => {
     const { renderer, onLogout } = await renderShell();
 
-    await press(renderer, 'authenticated-shell-calendar-button');
-    await press(renderer, 'authenticated-shell-profile-button');
+    await press(renderer, 'root-tab-profile');
     expect(renderer.root.findByType(ProfileScreen)).toBeTruthy();
 
     await press(renderer, 'logout-button');

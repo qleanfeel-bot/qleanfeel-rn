@@ -12,7 +12,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M2 — User/Profile | User profile, display-name editing, and client-side API boundaries | **COMPLETE** |
 | M3 — Calendar | Calendar and scheduling workflows using the development in-memory HTTP composition | **COMPLETE** |
 | M4 — Manual Orders | Manual order create/list/details flow, linked Calendar scheduling, and development HTTP composition | **COMPLETE** |
-| M5 — Evidence | Evidence capture and handling | **PLANNED** |
+| M5 — Cleaner Application Shell & Navigation | Authenticated Home, Calendar, Orders, and Profile root surfaces with nested Calendar/Orders navigation | **COMPLETE** |
 | M6 — Emergency | Emergency workflows | **PLANNED** |
 | M7 — Finance | Finance workflows | **PLANNED** |
 | M8 — Reports | Reporting workflows | **PLANNED** |
@@ -21,7 +21,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M11 — Security hardening | Security review and hardening | **PLANNED** |
 | M12 — Production release preparation | Production readiness and release preparation | **PLANNED** |
 
-M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M5–M12 remain planned and are not claims of existing functionality or settled implementation details.
+M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M6–M12 remain planned and are not claims of existing functionality or settled implementation details.
 
 M2.1–M2.5 are complete: Profile domain, UI/editing flow, API contract, provider-independent HTTP/API infrastructure, access-token port, safe error mapping, and local development composition are implemented. No real backend integration is claimed.
 
@@ -80,6 +80,16 @@ M3 uses a development in-memory HTTP implementation. It verifies the mobile API 
 | M4.5 — Verification | Domain/API/handler/orchestration/UI tests, static checks, and Android debug build | **COMPLETE** |
 
 M4 uses a development in-memory HTTP implementation only. `ManualOrder` stores a `calendarEntryId`; `CalendarEntry` owns `startAt`, `endAt`, and Calendar status. The application creates CalendarEntry first and compensates with Calendar delete if ManualOrder creation fails. This is client/application-level compensation, not a transaction. Production persistence and transactional backend orchestration remain future work.
+
+### M5 — Cleaner Application Shell & Navigation
+
+M5 is complete. `AuthGate` remains the authentication boundary and renders an authenticated shell backed by React Navigation. The four root surfaces are Home, Calendar, Orders, and Profile. Calendar and Orders have their own stacks, and both navigate to the shared OrderDetails implementation. The shell preserves M2-M4 domain ownership and behavior; Calendar `external_order` creation uses the existing scheduled-order application service. Navigation, gestures, Android setup, and scope are recorded in [ADR-013](ADR-013-navigation-application-shell.md).
+
+M5 passed its automated application/navigation tests and the physical Android smoke flows listed in [TEST_MATRIX.md](TEST_MATRIX.md). No production backend or new domain model was introduced.
+
+### Future user experience direction (outside M5)
+
+A later product decision may reorganize the root information architecture as **HOME | MONEY | PROFILE**, place a seven-day Calendar on Home, and present the monthly Calendar as an overlay. This is a future direction only; it is not M5 scope or an M5 acceptance criterion. Finance and related capabilities remain future work.
 
 `POST /v1/auth/bootstrap` and `GET /v1/me` are planned contracts only; neither endpoint exists yet. Firebase Authentication is the planned first provider, not an existing integration.
 

@@ -8,45 +8,72 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import PagerView from 'react-native-pager-view';
 import type { CalendarService } from '../../application/calendar/CalendarService';
+import type { CreateScheduledManualOrder } from '../../application/manualOrder/CreateScheduledManualOrder';
+import type { ManualOrderService } from '../../application/manualOrder/ManualOrderService';
 import {
   CALENDAR_ENTRY_TYPES,
   type CalendarEntry,
   type CalendarEntryStatus,
   type CalendarEntryType,
 } from '../../domain/calendar/entities/CalendarEntry';
+import type { ManualOrder } from '../../domain/manualOrder/entities/ManualOrder';
+import { MonthSelector } from './MonthSelector';
+import {
+  addCalendarDays,
+  formatCalendarWeek,
+  getCalendarWeekDates,
+  localWeekRange,
+  parseLocalDateKey,
+  startOfCalendarWeek,
+  toLocalDateKey,
+} from './calendarDateUtils';
 
 interface CalendarScreenProps {
   readonly calendarService: CalendarService;
+  readonly createScheduledManualOrder: CreateScheduledManualOrder;
+  readonly manualOrderService: ManualOrderService;
+  readonly isFocused?: boolean;
+  readonly initialDate?: string;
+  readonly onSelectDay: (date: string) => void;
+  readonly onOpenOrder: (orderId: string) => void;
 }
 
 type CalendarLoadState =
   | { readonly status: 'loading' }
-  | { readonly status: 'loaded'; readonly entries: CalendarEntry[] }
+  | { readonly status: 'loaded'; readonly entries: CalendarEntry[]; readonly orders: ManualOrder[] }
   | { readonly status: 'error' };
 
 type CalendarFormMode =
   | { readonly kind: 'create' }
-  | { readonly kind: 'edit'; readonly entryId: string; readonly status: CalendarEntryStatus }
+  | { readonly kind: 'edit'; readonly entryId: string; readonly status: CalendarEntryStatus; readonly hasManualOrder: boolean }
   | null;
 
 interface CalendarFormValues {
+  readonly customerName: string;
+  readonly serviceAddress: string;
   readonly title: string;
   readonly startAt: string;
   readonly endAt: string;
   readonly type: CalendarEntryType;
 }
 
-interface CalendarRange {
-  readonly from: string;
-  readonly to: string;
-  readonly label: string;
-}
-
 const ENTRY_TYPES = Object.values(CALENDAR_ENTRY_TYPES);
 
-export function CalendarScreen({ calendarService }: CalendarScreenProps): React.JSX.Element {
-  const [range] = useState(createDevelopmentRange);
+export function CalendarScreen({
+  calendarService,
+  createScheduledManualOrder,
+  manualOrderService,
+  isFocused = true,
+  initialDate,
+  onSelectDay,
+  onOpenOrder,
+}: CalendarScreenProps): React.JSX.Element {
+  const [weekStart, setWeekStart] = useState(() => startOfCalendarWeek(parseLocalDateKey(initialDate ?? '') ?? new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => toLocalDateKey(parseLocalDateKey(initialDate ?? '') ?? new Date()));
+  const [isMonthSelectorVisible, setIsMonthSelectorVisible] = useState(false);
+  const range = getWeekLoadRange(weekStart);
   const [loadState, setLoadState] = useState<CalendarLoadState>({ status: 'loading' });
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [formMode, setFormMode] = useState<CalendarFormMode>(null);
@@ -65,13 +92,17 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
   }, []);
 
   useEffect(() => {
+    if (!isFocused) {
+      return undefined;
+    }
     let isCurrentLoad = true;
     setLoadState({ status: 'loading' });
-    calendarService
-      .getEntries(range.from, range.to)
-      .then(entries => {
+    Promise.all([
+      calendarService.getEntries(range.from, range.to),
+      manualOrderService.getOrders(),
+    ]).then(([entries, orders]) => {
         if (isCurrentLoad) {
-          setLoadState({ status: 'loaded', entries });
+          setLoadState({ status: 'loaded', entries, orders });
         }
       })
       .catch(() => {
@@ -83,13 +114,16 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
     return () => {
       isCurrentLoad = false;
     };
-  }, [calendarService, loadAttempt, range.from, range.to]);
+  }, [calendarService, isFocused, loadAttempt, manualOrderService, range.from, range.to]);
 
   const reloadEntries = async (): Promise<void> => {
     try {
-      const entries = await calendarService.getEntries(range.from, range.to);
+      const [entries, orders] = await Promise.all([
+        calendarService.getEntries(range.from, range.to),
+        manualOrderService.getOrders(),
+      ]);
       if (isMounted.current) {
-        setLoadState({ status: 'loaded', entries });
+        setLoadState({ status: 'loaded', entries, orders });
       }
     } catch {
       if (isMounted.current) {
@@ -101,7 +135,7 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
   const openCreateForm = () => {
     setOperationError(null);
     setFormError(null);
-    setFormValues(createDefaultFormValues());
+    setFormValues(createDefaultFormValues(parseLocalDateKey(selectedDate) ?? new Date()));
     setFormMode({ kind: 'create' });
   };
 
@@ -109,12 +143,15 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
     setOperationError(null);
     setFormError(null);
     setFormValues({
+      customerName: '',
+      serviceAddress: '',
       title: entry.title,
       startAt: formatLocalDateTimeInput(new Date(entry.startAt)),
       endAt: formatLocalDateTimeInput(new Date(entry.endAt)),
       type: entry.type,
     });
-    setFormMode({ kind: 'edit', entryId: entry.id, status: entry.status });
+    const hasManualOrder = loadState.status === 'loaded' && loadState.orders.some(order => order.calendarEntryId === entry.id);
+    setFormMode({ kind: 'edit', entryId: entry.id, status: entry.status, hasManualOrder });
   };
 
   const closeForm = () => {
@@ -145,6 +182,13 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
       setFormError('Start time must be before end time.');
       return;
     }
+    if (
+      formMode.kind === 'create' && formValues.type === CALENDAR_ENTRY_TYPES.EXTERNAL_ORDER &&
+      (!formValues.customerName.trim() || !formValues.title.trim() || !formValues.serviceAddress.trim())
+    ) {
+      setFormError('Enter customer, service, and address.');
+      return;
+    }
 
     mutationInProgress.current = true;
     setIsMutating(true);
@@ -158,7 +202,17 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
         title: formValues.title,
       };
       if (formMode.kind === 'create') {
-        await calendarService.createEntry(changes);
+        if (formValues.type === CALENDAR_ENTRY_TYPES.EXTERNAL_ORDER) {
+          await createScheduledManualOrder.execute({
+            customerName: formValues.customerName.trim(),
+            serviceDescription: formValues.title.trim(),
+            serviceAddress: formValues.serviceAddress.trim(),
+            startAt,
+            endAt,
+          });
+        } else {
+          await calendarService.createEntry(changes);
+        }
       } else {
         await calendarService.updateEntry(formMode.entryId, changes);
       }
@@ -167,13 +221,16 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
         setFormError(null);
       }
       await reloadEntries();
-    } catch {
+    } catch (error) {
       if (isMounted.current) {
-        setOperationError(
-          formMode.kind === 'create'
-            ? "Couldn't create the calendar entry. Please try again."
-            : "Couldn't update the calendar entry. Please try again.",
-        );
+        const isCreatingOrder = formMode.kind === 'create' && formValues.type === CALENDAR_ENTRY_TYPES.EXTERNAL_ORDER;
+        setOperationError(isCreatingOrder && getErrorCode(error) === 'ScheduledOrderCompensationFailed'
+          ? 'Couldn’t finish saving the order. Check Calendar before retrying.'
+          : isCreatingOrder
+            ? "Couldn't create the order. Please try again."
+            : formMode.kind === 'create'
+              ? "Couldn't create the calendar entry. Please try again."
+              : "Couldn't update the calendar entry. Please try again.");
       }
     } finally {
       mutationInProgress.current = false;
@@ -206,22 +263,51 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
     }
   };
 
+  const ordersByEntryId = new Map(
+    (loadState.status === 'loaded' ? loadState.orders : []).map(order => [order.calendarEntryId, order]),
+  );
+  const handleDaySelect = (date: string) => {
+    setSelectedDate(date);
+    onSelectDay(date);
+  };
+  const handleWeekPageSelected = (position: number) => {
+    if (position === 1) {
+      return;
+    }
+    const daysToMove = position === 0 ? -7 : 7;
+    setWeekStart(current => addCalendarDays(current, daysToMove));
+    setSelectedDate(current => {
+      const parsed = parseLocalDateKey(current) ?? new Date();
+      return toLocalDateKey(addCalendarDays(parsed, daysToMove));
+    });
+  };
+  const handleMonthSelect = (date: string) => {
+    const selected = parseLocalDateKey(date);
+    if (selected) {
+      setSelectedDate(date);
+      setWeekStart(startOfCalendarWeek(selected));
+    }
+    setIsMonthSelectorVisible(false);
+  };
+
   return (
-    <ScrollView
-      contentContainerStyle={styles.screen}
-      keyboardShouldPersistTaps="handled"
-      testID="calendar-screen">
+    <View style={styles.screen} testID="calendar-screen">
       <View style={styles.header}>
         <Text style={styles.title}>Calendar</Text>
-        <Text style={styles.range}>{range.label}</Text>
-        <Pressable
-          accessibilityRole="button"
-          disabled={isMutating}
-          onPress={openCreateForm}
-          style={[styles.primaryButton, isMutating && styles.disabledButton]}
-          testID="calendar-create-button">
-          <Text style={styles.primaryButtonText}>Add entry</Text>
-        </Pressable>
+        <Text style={styles.range} testID="calendar-week-range">{formatCalendarWeek(weekStart)}</Text>
+        <View style={styles.headerActions}>
+          <Pressable accessibilityRole="button" onPress={() => setIsMonthSelectorVisible(true)} style={styles.secondaryButton} testID="calendar-open-month-selector">
+            <Text style={styles.secondaryButtonText}>Month</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isMutating}
+            onPress={openCreateForm}
+            style={[styles.primaryButton, isMutating && styles.disabledButton]}
+            testID="calendar-create-button">
+            <Text style={styles.primaryButtonText}>Add entry</Text>
+          </Pressable>
+        </View>
       </View>
 
       {operationError ? (
@@ -231,17 +317,20 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
       ) : null}
 
       {formMode ? (
-        <CalendarEntryForm
-          error={formError}
-          isEditing={formMode.kind === 'edit'}
-          isSaving={isMutating}
-          onCancel={closeForm}
-          onSave={saveEntry}
-          onTypeChange={type => updateFormValue('type', type)}
-          onValueChange={updateFormValue}
-          status={formMode.kind === 'edit' ? formMode.status : null}
-          values={formValues}
-        />
+        <ScrollView contentContainerStyle={styles.formScroll} keyboardShouldPersistTaps="handled">
+          <CalendarEntryForm
+            error={formError}
+            hasManualOrder={formMode.kind === 'edit' && formMode.hasManualOrder}
+            isEditing={formMode.kind === 'edit'}
+            isSaving={isMutating}
+            onCancel={closeForm}
+            onSave={saveEntry}
+            onTypeChange={type => updateFormValue('type', type)}
+            onValueChange={updateFormValue}
+            status={formMode.kind === 'edit' ? formMode.status : null}
+            values={formValues}
+          />
+        </ScrollView>
       ) : null}
 
       {loadState.status === 'loading' ? (
@@ -257,7 +346,7 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
           <Text style={styles.message}>Please try again.</Text>
           <Pressable
             accessibilityRole="button"
-            onPress={() => setLoadAttempt(current => current + 1)}
+            onPress={() => setLoadAttempt(attempt => attempt + 1)}
             style={styles.secondaryButton}
             testID="calendar-retry-button">
             <Text style={styles.secondaryButtonText}>Retry</Text>
@@ -265,31 +354,137 @@ export function CalendarScreen({ calendarService }: CalendarScreenProps): React.
         </View>
       ) : null}
 
-      {loadState.status === 'loaded' && loadState.entries.length === 0 ? (
-        <View style={styles.messageCard} testID="calendar-empty">
-          <Text style={styles.messageTitle}>No calendar entries</Text>
-        </View>
+      {loadState.status === 'loaded' ? (
+        <PagerView
+          key={toLocalDateKey(weekStart)}
+          initialPage={1}
+          onPageSelected={(event: { readonly nativeEvent: { readonly position: number } }) => handleWeekPageSelected(event.nativeEvent.position)}
+          offscreenPageLimit={1}
+          style={styles.weekPager}
+          scrollEnabled
+          testID="calendar-week-pager">
+          {[-1, 0, 1].map(offset => {
+            const pageWeekStart = addCalendarDays(weekStart, offset * 7);
+            const pageRange = localWeekRange(pageWeekStart);
+            const entries = loadState.entries.filter(entry =>
+              Date.parse(entry.startAt) < Date.parse(pageRange.to) &&
+              Date.parse(pageRange.from) < Date.parse(entry.endAt));
+            return (
+              <View key={toLocalDateKey(pageWeekStart)} collapsable={false}>
+                <CalendarWeekPage
+                  disabled={isMutating}
+                  entries={entries}
+                  isCurrentWeek={offset === 0}
+                  onDelete={deleteEntry}
+                  onEdit={openEditForm}
+                  onOpenOrder={onOpenOrder}
+                  onSelectDay={handleDaySelect}
+                  ordersByEntryId={ordersByEntryId}
+                  selectedDate={selectedDate}
+                  today={toLocalDateKey(new Date())}
+                  weekStart={pageWeekStart}
+                />
+              </View>
+            );
+          })}
+        </PagerView>
       ) : null}
 
-      {loadState.status === 'loaded' && loadState.entries.length > 0 ? (
-        <View style={styles.entries} testID="calendar-list">
-          {loadState.entries.map(entry => (
+      <MonthSelector
+        onClose={() => setIsMonthSelectorVisible(false)}
+        onSelectDate={handleMonthSelect}
+        selectedDate={selectedDate}
+        visible={isMonthSelectorVisible}
+      />
+    </View>
+  );
+}
+
+interface CalendarWeekPageProps {
+  readonly disabled: boolean;
+  readonly entries: CalendarEntry[];
+  readonly isCurrentWeek: boolean;
+  readonly onDelete: (entryId: string) => Promise<void>;
+  readonly onEdit: (entry: CalendarEntry) => void;
+  readonly onOpenOrder: (orderId: string) => void;
+  readonly onSelectDay: (date: string) => void;
+  readonly ordersByEntryId: Map<string, ManualOrder>;
+  readonly selectedDate: string;
+  readonly today: string;
+  readonly weekStart: Date;
+}
+
+function CalendarWeekPage({
+  disabled,
+  entries,
+  isCurrentWeek,
+  onDelete,
+  onEdit,
+  onOpenOrder,
+  onSelectDay,
+  ordersByEntryId,
+  selectedDate,
+  today,
+  weekStart,
+}: CalendarWeekPageProps): React.JSX.Element {
+  const days = getCalendarWeekDates(weekStart);
+  const sortedEntries = [...entries].sort((left, right) => Date.parse(left.startAt) - Date.parse(right.startAt));
+
+  return (
+    <View style={styles.weekPage}>
+      <View style={styles.dayStrip} testID="calendar-week-days">
+        {days.map(day => {
+          const date = toLocalDateKey(day);
+          const isToday = date === today;
+          const isSelected = date === selectedDate;
+          return (
+            <Pressable
+              accessibilityLabel={`${isToday ? 'Today, ' : ''}${day.toLocaleDateString(undefined, { dateStyle: 'full' })}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              key={date}
+              onPress={() => onSelectDay(date)}
+              style={[styles.dayButton, isSelected && styles.selectedDayButton, isToday && styles.todayDayButton]}
+              testID={`calendar-day-${date}`}>
+              <Text style={[styles.dayName, isSelected && styles.selectedDayText]}>
+                {day.toLocaleDateString(undefined, { weekday: 'short' })}
+              </Text>
+              <Text style={[styles.dayNumber, isSelected && styles.selectedDayText, isToday && !isSelected && styles.todayDayNumber]}>
+                {day.getDate()}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <ScrollView contentContainerStyle={styles.weekEntries} keyboardShouldPersistTaps="handled">
+        {sortedEntries.length === 0 ? (
+          <View
+            style={styles.messageCard}
+            testID={isCurrentWeek ? 'calendar-empty' : `calendar-empty-${toLocalDateKey(weekStart)}`}>
+            <Text style={styles.messageTitle}>Nothing scheduled this week</Text>
+          </View>
+        ) : sortedEntries.map(entry => {
+          const order = ordersByEntryId.get(entry.id);
+          return (
             <CalendarEntryCard
-              disabled={isMutating}
+              disabled={disabled}
               entry={entry}
               key={entry.id}
-              onDelete={() => deleteEntry(entry.id)}
-              onEdit={() => openEditForm(entry)}
+              onDelete={() => onDelete(entry.id)}
+              onEdit={() => onEdit(entry)}
+              onOpenOrder={order ? () => onOpenOrder(order.id) : undefined}
+              order={order}
             />
-          ))}
-        </View>
-      ) : null}
-    </ScrollView>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
 interface CalendarEntryFormProps {
   readonly error: string | null;
+  readonly hasManualOrder: boolean;
   readonly isEditing: boolean;
   readonly isSaving: boolean;
   readonly onCancel: () => void;
@@ -305,6 +500,7 @@ interface CalendarEntryFormProps {
 
 function CalendarEntryForm({
   error,
+  hasManualOrder,
   isEditing,
   isSaving,
   onCancel,
@@ -314,9 +510,11 @@ function CalendarEntryForm({
   status,
   values,
 }: CalendarEntryFormProps): React.JSX.Element {
+  const isCreatingOrder = !isEditing && values.type === CALENDAR_ENTRY_TYPES.EXTERNAL_ORDER;
+
   return (
     <View style={styles.form} testID="calendar-entry-form">
-      <Text style={styles.sectionTitle}>{isEditing ? 'Edit entry' : 'Create entry'}</Text>
+      <Text style={styles.sectionTitle}>{isEditing ? 'Edit entry' : isCreatingOrder ? 'Create order' : 'Create entry'}</Text>
 
       {isEditing && status ? (
         <Text accessibilityLabel={`Status ${status} (read only)`} style={styles.readOnly}>
@@ -324,15 +522,43 @@ function CalendarEntryForm({
         </Text>
       ) : null}
 
-      <Text style={styles.fieldLabel}>Title</Text>
+      {isCreatingOrder ? (
+        <>
+          <Text style={styles.fieldLabel}>Customer</Text>
+          <TextInput
+            accessibilityLabel="Order customer"
+            editable={!isSaving}
+            onChangeText={value => onValueChange('customerName', value)}
+            style={styles.input}
+            testID="calendar-order-customer-input"
+            value={values.customerName}
+          />
+        </>
+      ) : null}
+
+      <Text style={styles.fieldLabel}>{isCreatingOrder ? 'Service' : 'Title'}</Text>
       <TextInput
-        accessibilityLabel="Calendar entry title"
+        accessibilityLabel={isCreatingOrder ? 'Order service' : 'Calendar entry title'}
         editable={!isSaving}
         onChangeText={value => onValueChange('title', value)}
         style={styles.input}
         testID="calendar-title-input"
         value={values.title}
       />
+
+      {isCreatingOrder ? (
+        <>
+          <Text style={styles.fieldLabel}>Address</Text>
+          <TextInput
+            accessibilityLabel="Order address"
+            editable={!isSaving}
+            onChangeText={value => onValueChange('serviceAddress', value)}
+            style={styles.input}
+            testID="calendar-order-address-input"
+            value={values.serviceAddress}
+          />
+        </>
+      ) : null}
 
       <Text style={styles.fieldLabel}>Start (local time)</Text>
       <TextInput
@@ -360,21 +586,31 @@ function CalendarEntryForm({
 
       <Text style={styles.fieldLabel}>Type</Text>
       <View style={styles.types}>
-        {ENTRY_TYPES.map(type => (
-          <Pressable
-            accessibilityLabel={`Type ${type}`}
-            accessibilityRole="button"
-            accessibilityState={{ selected: values.type === type }}
-            disabled={isSaving}
-            key={type}
-            onPress={() => onTypeChange(type)}
-            style={[styles.typeOption, values.type === type && styles.selectedTypeOption]}
-            testID={`calendar-type-${type}`}>
-            <Text style={[styles.typeText, values.type === type && styles.selectedTypeText]}>
-              {type}
-            </Text>
-          </Pressable>
-        ))}
+        {ENTRY_TYPES.map(type => {
+          const orderTypeChangeBlocked = isEditing && (
+            (type === CALENDAR_ENTRY_TYPES.EXTERNAL_ORDER && !hasManualOrder && values.type !== CALENDAR_ENTRY_TYPES.EXTERNAL_ORDER) ||
+            (hasManualOrder && type !== CALENDAR_ENTRY_TYPES.EXTERNAL_ORDER)
+          );
+          return (
+            <Pressable
+              accessibilityLabel={`Type ${type}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: values.type === type }}
+              disabled={isSaving || orderTypeChangeBlocked}
+              key={type}
+              onPress={() => {
+                if (!orderTypeChangeBlocked) {
+                  onTypeChange(type);
+                }
+              }}
+              style={[styles.typeOption, values.type === type && styles.selectedTypeOption]}
+              testID={`calendar-type-${type}`}>
+              <Text style={[styles.typeText, values.type === type && styles.selectedTypeText]}>
+                {type}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {error ? (
@@ -390,7 +626,7 @@ function CalendarEntryForm({
         style={[styles.primaryButton, isSaving && styles.disabledButton]}
         testID="calendar-save-button">
         <Text style={styles.primaryButtonText}>
-          {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Create entry'}
+          {isSaving ? 'Saving…' : isEditing ? 'Save changes' : isCreatingOrder ? 'Create order' : 'Create entry'}
         </Text>
       </Pressable>
       <Pressable
@@ -410,6 +646,8 @@ interface CalendarEntryCardProps {
   readonly entry: CalendarEntry;
   readonly onDelete: () => Promise<void>;
   readonly onEdit: () => void;
+  readonly onOpenOrder?: () => void;
+  readonly order?: ManualOrder;
 }
 
 function CalendarEntryCard({
@@ -417,13 +655,16 @@ function CalendarEntryCard({
   entry,
   onDelete,
   onEdit,
+  onOpenOrder,
+  order,
 }: CalendarEntryCardProps): React.JSX.Element {
   const accessibleTitle = entry.title || 'calendar entry';
-  return (
-    <View style={styles.entryCard} testID={`calendar-entry-${entry.id}`}>
+  const details = (
+    <>
       <Text style={styles.entryTitle} testID={`calendar-entry-${entry.id}-title`}>
         {entry.title}
       </Text>
+      {order ? <Text style={styles.entryMetadata}>{order.customerName} · {order.serviceAddress}</Text> : null}
       <Text style={styles.entryTime} testID={`calendar-entry-${entry.id}-start`}>
         Start: {formatDisplayDateTime(entry.startAt)}
       </Text>
@@ -436,6 +677,15 @@ function CalendarEntryCard({
       <Text style={styles.entryMetadata} testID={`calendar-entry-${entry.id}-status`}>
         Status: {entry.status}
       </Text>
+    </>
+  );
+  return (
+    <View style={styles.entryCard} testID={`calendar-entry-${entry.id}`}>
+      {onOpenOrder ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Open order ${order?.customerName ?? accessibleTitle}`} onPress={onOpenOrder} testID={`calendar-open-order-${order?.id}`}>
+          {details}
+        </Pressable>
+      ) : details}
       <View style={styles.entryActions}>
         <Pressable
           accessibilityLabel={`Edit ${accessibleTitle}`}
@@ -460,14 +710,12 @@ function CalendarEntryCard({
   );
 }
 
-function createDevelopmentRange(now = new Date()): CalendarRange {
-  const fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const toDate = new Date(fromDate);
-  toDate.setDate(toDate.getDate() + 30);
+function getWeekLoadRange(weekStart: Date): { readonly from: string; readonly to: string } {
+  const from = localWeekRange(addCalendarDays(weekStart, -7));
+  const to = localWeekRange(addCalendarDays(weekStart, 14));
   return {
-    from: fromDate.toISOString(),
-    to: toDate.toISOString(),
-    label: `Upcoming 30 days · ${fromDate.toLocaleDateString()} – ${toDate.toLocaleDateString()}`,
+    from: from.from,
+    to: to.to,
   };
 }
 
@@ -477,6 +725,8 @@ function createDefaultFormValues(now = new Date()): CalendarFormValues {
   const end = new Date(start.getTime());
   end.setHours(end.getHours() + 1);
   return {
+    customerName: '',
+    serviceAddress: '',
     title: '',
     startAt: formatLocalDateTimeInput(start),
     endAt: formatLocalDateTimeInput(end),
@@ -525,16 +775,82 @@ function formatDisplayDateTime(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function getErrorCode(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return null;
+  }
+  return typeof error.code === 'string' ? error.code : null;
+}
+
 const styles = StyleSheet.create({
   screen: {
-    flexGrow: 1,
+    flex: 1,
     paddingHorizontal: 24,
-    paddingVertical: 32,
+    paddingTop: 20,
+    paddingBottom: 12,
     backgroundColor: '#F4F7F6',
   },
   header: {
     gap: 10,
-    marginBottom: 22,
+    marginBottom: 12,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  weekPager: {
+    flex: 1,
+    minHeight: 0,
+  },
+  weekPage: {
+    flex: 1,
+  },
+  dayStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 2,
+    marginBottom: 10,
+  },
+  dayButton: {
+    flex: 1,
+    minHeight: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    borderRadius: 13,
+  },
+  selectedDayButton: {
+    backgroundColor: '#176B58',
+  },
+  todayDayButton: {
+    borderWidth: 1,
+    borderColor: '#176B58',
+  },
+  dayName: {
+    color: '#648078',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dayNumber: {
+    color: '#1C342E',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  todayDayNumber: {
+    color: '#176B58',
+  },
+  selectedDayText: {
+    color: '#FFFFFF',
+  },
+  weekEntries: {
+    flexGrow: 1,
+    gap: 12,
+    paddingBottom: 20,
+  },
+  formScroll: {
+    flexGrow: 1,
   },
   title: {
     color: '#173C34',
