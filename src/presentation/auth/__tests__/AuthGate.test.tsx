@@ -32,6 +32,14 @@ const profile: Profile = {
   locale: null,
   country: null,
 };
+const mountedRenderers = new Set<ReactTestRenderer.ReactTestRenderer>();
+
+afterEach(() => {
+  ReactTestRenderer.act(() => {
+    mountedRenderers.forEach(renderer => renderer.unmount());
+  });
+  mountedRenderers.clear();
+});
 
 function createProfileService(): ProfileService {
   const repository: ProfileRepository = {
@@ -104,6 +112,7 @@ async function renderGate(
       />,
     );
   });
+  mountedRenderers.add(renderer);
   return renderer;
 }
 
@@ -137,7 +146,7 @@ describe('AuthGate', () => {
     expect(renderer.root.findByProps({ testID: 'auth-gate-authenticating' })).toBeTruthy();
   });
 
-  it('renders the authenticated shell with Profile selected when restoration resolves a user', async () => {
+  it('lands on Home after restoration resolves a user', async () => {
     const { controller, provider } = createController();
     provider.restoreSession.mockResolvedValue(credential);
 
@@ -146,11 +155,9 @@ describe('AuthGate', () => {
     expect(controller.state).toEqual({ status: 'authenticated', user });
     expect(renderer.root.findByProps({ testID: 'auth-gate-authenticated' })).toBeTruthy();
     expect(renderer.root.findByProps({ testID: 'authenticated-app-shell' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'profile-screen' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'profile-loaded' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: 'Qleanfeel User' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: 'Account active' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'logout-button' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'home-screen' })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: 'home-greeting' }).props.children).toBe('Hello, Qleanfeel User');
+    expect(renderer.root.findByProps({ testID: 'root-tab-home' })).toBeTruthy();
     const renderedOutput = JSON.stringify(renderer.toJSON());
     expect(renderedOutput).not.toContain(user.id);
     expect(renderedOutput).not.toContain(credential);
@@ -169,19 +176,16 @@ describe('AuthGate', () => {
     expect(shell.props.calendarService).toBe(calendarService);
   });
 
-  it('routes the logout control through AuthStateController.logout', async () => {
+  it('routes Profile navigation and logout through AuthStateController.logout', async () => {
     const { controller, provider } = createController();
     provider.restoreSession.mockResolvedValue(credential);
     const logout = jest.spyOn(controller, 'logout');
     const renderer = await renderGate(controller);
 
     await ReactTestRenderer.act(async () => {
-      renderer.root.findByProps({ testID: 'authenticated-shell-calendar-button' }).props.onPress();
+      renderer.root.findByProps({ testID: 'root-tab-profile' }).props.onPress();
     });
-    expect(renderer.root.findByProps({ testID: 'calendar-screen' })).toBeTruthy();
-    await ReactTestRenderer.act(async () => {
-      renderer.root.findByProps({ testID: 'authenticated-shell-profile-button' }).props.onPress();
-    });
+    expect(renderer.root.findByProps({ testID: 'profile-screen' })).toBeTruthy();
 
     await ReactTestRenderer.act(async () => {
       renderer.root.findByProps({ testID: 'logout-button' }).props.onPress();
@@ -258,6 +262,7 @@ describe('AuthGate', () => {
     const renderer = await renderGate(controller);
 
     await ReactTestRenderer.act(() => renderer.unmount());
+    mountedRenderers.delete(renderer);
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });

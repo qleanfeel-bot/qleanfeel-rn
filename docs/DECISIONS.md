@@ -75,3 +75,9 @@ This log records accepted decisions only. Proposed architecture principles are d
 - **Status:** Accepted
 - **File:** [docs/ADR-012-manual-orders.md](ADR-012-manual-orders.md)
 - **Decision:** ManualOrder and CalendarEntry are separate domain entities. ManualOrder stores a `calendarEntryId` reference and order details; CalendarEntry alone owns scheduling timestamps and Calendar status. M4 creates CalendarEntry and then ManualOrder through an application use case, with development-level compensating Calendar deletion if ManualOrder creation fails. This is not a transaction. Production persistence and transactional backend orchestration remain deferred.
+
+## ADR-013 — Cleaner Application Shell & Navigation
+
+- **Status:** Accepted and implemented in M5
+- **File:** [docs/ADR-013-navigation-application-shell.md](ADR-013-navigation-application-shell.md)
+- **Decision:** Use React Navigation for the authenticated Home, Calendar, Orders, and Profile root surfaces, with separate Calendar and Orders stacks and one shared OrderDetails implementation. Keep AuthGate as the authentication boundary and keep domain state in the existing application/domain services. Calendar gestures own horizontal paging on the Calendar surface. The ADR also records the Android `react-native-screens` fragment factory and predictive-back compatibility setting.

@@ -7,12 +7,19 @@ import ReactTestRenderer from 'react-test-renderer';
 import App from '../App';
 import { createDevelopmentAuthController } from '../src/development/auth/createDevelopmentAuthController';
 
+const mountedRenderers: ReactTestRenderer.ReactTestRenderer[] = [];
+
+afterEach(() => {
+  ReactTestRenderer.act(() => mountedRenderers.splice(0).forEach(renderer => renderer.unmount()));
+});
+
 test('renders LoginScreen in the Qleanfeel root component', async () => {
   let renderer: ReactTestRenderer.ReactTestRenderer;
 
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<App />);
   });
+  mountedRenderers.push(renderer!);
 
   expect(renderer!.root.findByProps({testID: 'qleanfeel-root'})).toBeTruthy();
   expect(renderer!.root.findByProps({testID: 'login-screen'})).toBeTruthy();
@@ -28,6 +35,7 @@ test('supplies the injected AuthStateController to LoginScreen', async () => {
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<App authController={authController} />);
   });
+  mountedRenderers.push(renderer!);
 
   expect(renderer!.root.findByProps({testID: 'login-screen'})).toBeTruthy();
   expect(subscribe).toHaveBeenCalledTimes(1);
@@ -39,6 +47,7 @@ test('renders using the development composition without provider or API infrastr
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<App />);
   });
+  mountedRenderers.push(renderer!);
 
   expect(renderer!.root.findByProps({testID: 'request-otp-button'})).toBeTruthy();
   expect(JSON.stringify(renderer!.toJSON())).not.toContain('development-preview-credential');
@@ -49,6 +58,7 @@ test('development composition exercises OTP and authenticated UI without exposin
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<App />);
   });
+  mountedRenderers.push(renderer);
 
   await ReactTestRenderer.act(async () => {
     renderer.root.findByProps({testID: 'phone-input'}).props.onChangeText('+15550100');
@@ -66,11 +76,11 @@ test('development composition exercises OTP and authenticated UI without exposin
   });
 
   expect(renderer.root.findByProps({testID: 'auth-gate-authenticated'})).toBeTruthy();
-  expect(renderer.root.findByProps({testID: 'profile-loaded'})).toBeTruthy();
+  expect(renderer.root.findByProps({testID: 'home-screen'})).toBeTruthy();
   expect(JSON.stringify(renderer.toJSON())).not.toContain('development-preview-credential');
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'authenticated-shell-calendar-button'}).props.onPress();
+    renderer.root.findByProps({testID: 'root-tab-calendar'}).props.onPress();
   });
 
   expect(renderer.root.findByProps({testID: 'calendar-screen'})).toBeTruthy();
@@ -78,13 +88,7 @@ test('development composition exercises OTP and authenticated UI without exposin
     .toBeTruthy();
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'authenticated-shell-profile-button'}).props.onPress();
-  });
-
-  expect(renderer.root.findByProps({testID: 'profile-screen'})).toBeTruthy();
-
-  await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'authenticated-shell-orders-button'}).props.onPress();
+    renderer.root.findByProps({testID: 'root-tab-orders'}).props.onPress();
   });
   expect(renderer.root.findByProps({testID: 'manual-orders-empty'})).toBeTruthy();
 
@@ -111,9 +115,9 @@ test('development composition exercises OTP and authenticated UI without exposin
   expect(renderer.root.findByProps({testID: 'manual-order-details-loaded'})).toBeTruthy();
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'manual-order-details-back'}).props.onPress();
-    renderer.root.findByProps({testID: 'authenticated-shell-profile-button'}).props.onPress();
+    renderer.root.findByProps({testID: 'root-tab-profile'}).props.onPress();
   });
+  expect(renderer.root.findByProps({testID: 'profile-screen'})).toBeTruthy();
   await ReactTestRenderer.act(async () => {
     renderer.root.findByProps({testID: 'logout-button'}).props.onPress();
   });

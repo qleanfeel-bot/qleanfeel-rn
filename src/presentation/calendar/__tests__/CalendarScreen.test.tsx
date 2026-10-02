@@ -2,8 +2,11 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { TextInput } from 'react-native';
 import { CalendarService } from '../../../application/calendar/CalendarService';
+import { CreateScheduledManualOrder } from '../../../application/manualOrder/CreateScheduledManualOrder';
+import { ManualOrderService } from '../../../application/manualOrder/ManualOrderService';
 import { createCalendarEntry, type CalendarEntry } from '../../../domain/calendar/entities/CalendarEntry';
 import type { CalendarRepository } from '../../../domain/calendar/repositories/CalendarRepository';
+import type { ManualOrderRepository } from '../../../domain/manualOrder/repositories/ManualOrderRepository';
 import { CalendarScreen } from '../CalendarScreen';
 
 const entry: CalendarEntry = {
@@ -53,10 +56,29 @@ function createCalendarService(initialEntries: CalendarEntry[] = []) {
   return { service: new CalendarService(repository), repository };
 }
 
-async function renderCalendar(service: CalendarService) {
+function createManualOrderService() {
+  const repository: ManualOrderRepository = {
+    getOrders: jest.fn().mockResolvedValue([]),
+    createOrder: jest.fn(async () => { throw new Error('not used'); }),
+    getOrder: jest.fn(async () => { throw new Error('not used'); }),
+  };
+  return new ManualOrderService(repository);
+}
+
+async function renderCalendar(service: CalendarService, initialDate?: string) {
+  const manualOrderService = createManualOrderService();
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
-    renderer = ReactTestRenderer.create(<CalendarScreen calendarService={service} />);
+    renderer = ReactTestRenderer.create(
+      <CalendarScreen
+        calendarService={service}
+        createScheduledManualOrder={new CreateScheduledManualOrder(service, manualOrderService)}
+        initialDate={initialDate}
+        manualOrderService={manualOrderService}
+        onOpenOrder={jest.fn()}
+        onSelectDay={jest.fn()}
+      />,
+    );
   });
   return renderer;
 }
@@ -128,7 +150,56 @@ describe('CalendarScreen', () => {
     const renderer = await renderCalendar(service);
 
     expect(control(renderer, 'calendar-empty')).toBeTruthy();
-    expect(JSON.stringify(renderer.toJSON())).toContain('No calendar entries');
+    expect(JSON.stringify(renderer.toJSON())).toContain('Nothing scheduled this week');
+  });
+
+  it('starts with today identified by its date and opens the selected concrete day', async () => {
+    const { service, repository } = createCalendarService();
+    const onSelectDay = jest.fn();
+    const manualOrderService = createManualOrderService();
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <CalendarScreen
+          calendarService={service}
+          createScheduledManualOrder={new CreateScheduledManualOrder(service, manualOrderService)}
+          manualOrderService={manualOrderService}
+          onOpenOrder={jest.fn()}
+          onSelectDay={onSelectDay}
+        />,
+      );
+    });
+    const today = new Date();
+    const dateKey = `${String(today.getFullYear()).padStart(4, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const todayButton = control(renderer, `calendar-day-${dateKey}`);
+    expect(todayButton.props.accessibilityLabel).toContain('Today');
+    expect(todayButton.props.accessibilityState).toEqual({ selected: true });
+    const [from, to] = repository.getEntries.mock.calls[0];
+    expect(new Date(from).getDay()).toBe(1);
+    expect(Date.parse(to) - Date.parse(from)).toBeGreaterThanOrEqual(21 * 24 * 60 * 60 * 1000 - 60 * 60 * 1000);
+    await press(renderer, `calendar-day-${dateKey}`);
+    expect(onSelectDay).toHaveBeenCalledWith(dateKey);
+  });
+
+  it('month selector jumps to the week containing the chosen date', async () => {
+    const { service } = createCalendarService();
+    const renderer = await renderCalendar(service, '2026-10-01');
+    await press(renderer, 'calendar-open-month-selector');
+    await press(renderer, 'calendar-month-date-2026-10-20');
+    expect(control(renderer, 'calendar-week-range').props.children).toContain('Oct 19–25');
+  });
+
+  it('changes the week period when the inner pager advances', async () => {
+    const { service } = createCalendarService();
+    const renderer = await renderCalendar(service, '2026-10-01');
+    const pager = control(renderer, 'calendar-week-pager');
+
+    await ReactTestRenderer.act(async () => {
+      (pager.instance as { setPage: (page: number) => void }).setPage(2);
+      await Promise.resolve();
+    });
+
+    expect(control(renderer, 'calendar-week-range').props.children).toContain('Oct 5–11');
   });
 
   it('shows a safe load error and retries the service request', async () => {
@@ -192,13 +263,13 @@ describe('CalendarScreen', () => {
     await enterText(renderer, 'calendar-title-input', 'Updated title');
     await enterText(renderer, 'calendar-start-input', startAt);
     await enterText(renderer, 'calendar-end-input', endAt);
-    await press(renderer, 'calendar-type-external_order');
+    await press(renderer, 'calendar-type-personal');
     await press(renderer, 'calendar-save-button');
 
     expect(repository.updateEntry).toHaveBeenCalledWith(entry.id, {
       startAt: localInputToIso(startAt),
       endAt: localInputToIso(endAt),
-      type: 'external_order',
+      type: 'personal',
       title: 'Updated title',
     });
     const changes = repository.updateEntry.mock.calls[0][1];

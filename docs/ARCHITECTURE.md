@@ -3,23 +3,34 @@
 ## Current state — IMPLEMENTED
 
 - The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated shell.
-- After authentication, the current app structure is:
+- After authentication, `AuthGate` renders `AuthenticatedAppShell`, a thin layout wrapper which mounts the React Navigation root. The application and navigation structure is:
 
   ```text
-  Auth
+  AuthGate
     ↓
-  Authenticated shell
-    ├── Profile
-    ├── Calendar
-    └── Orders
+  AuthenticatedAppShell (layout wrapper)
+    ↓
+  RootNavigator
+    ↓
+  MainNavigator
+    ├── Home
+    ├── CalendarStack
+    │   ├── WeekView
+    │   ├── DaySummary
+    │   └── OrderDetails
+    ├── OrdersStack
+    │   ├── OrdersList
+    │   ├── AddOrder
+    │   └── OrderDetails
+    └── Profile
   ```
 
-  The shell switches between Profile, Calendar, and Orders using local React state. React Navigation is not currently used; adding a full navigation library is a separate decision if the screen count grows enough to require it.
+  Home, Calendar, Orders, and Profile are the four bottom-tab root surfaces. Calendar and Orders each own a native stack. `AuthGate` remains the authentication boundary; navigation does not own or duplicate domain state. M5 navigation decisions and Android setup are recorded in [ADR-013](ADR-013-navigation-application-shell.md).
 - Android and iOS native project shells are present. Both use the application/bundle identifier `com.qleanfeel.app`.
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
 - The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
-- The current Jest suite has 28 suites and 262 tests. Tests exercise domain/application and presentation behavior with fakes and development in-memory handlers; they are not real provider/backend integration tests.
+- The current Jest suite has 30 suites and 276 tests. Tests exercise domain/application and presentation behavior with fakes and development in-memory handlers; they are not real provider/backend integration tests.
 - The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
@@ -96,7 +107,7 @@ future provider adapter / backend API implementation
 
 `AuthStateController` owns application authentication state and coordinates restoration, OTP request/verification, and logout through the ports. Provider failures are represented with provider-independent auth error codes. No Firebase adapter or concrete auth provider/backend implementation exists. Shared `HttpTransport` is implemented for Profile and Calendar APIs but does not connect to a production backend.
 
-`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or `AuthenticatedAppShell`. The shell locally switches between `ProfileScreen`, `CalendarScreen`, and `ManualOrdersScreen`. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and provides logout. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
+`AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or `AuthenticatedAppShell`. The authenticated shell mounts `RootNavigator`; `MainNavigator` provides Home, Calendar, Orders, and Profile root tabs. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and provides logout. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
 
 Firebase is planned as the first provider but is not integrated. Backend authentication/API is planned; `POST /v1/auth/bootstrap` and `GET /v1/me` do not exist. No production credential persistence or production signing is configured.
 
@@ -252,6 +263,18 @@ GET  /v1/me/manual-orders/{orderId}
 `CreateScheduledManualOrder` coordinates Calendar creation and ManualOrder creation through the existing application services. If ManualOrder creation fails after Calendar creation, it attempts to delete the newly created CalendarEntry and propagates the original failure. If compensation also fails, it returns a safe compensation error. This is development/application-level compensation, not a transaction; production transactional orchestration and persistent storage are not implemented.
 
 The development HTTP router explicitly sends `/v1/me/manual-orders` requests to the in-memory ManualOrder handler. ManualOrder and Calendar state are process-local and are lost when the development composition is recreated. No real backend, database, or production persistence is present.
+
+### M5 — Cleaner Application Shell & Navigation — IMPLEMENTED
+
+M5 adds the authenticated React Navigation shell described above. `MainNavigator` exposes four bottom-tab root surfaces: Home, Calendar, Orders, and Profile. Calendar is a stack of `WeekView`, `DaySummary`, and `OrderDetails`; Orders is a stack of `OrdersList`, `AddOrder`, and `OrderDetails`. Both stacks render the same `OrderDetailsScreen` implementation. `AuthGate` still decides whether the user sees loading, login, or authenticated content; navigation is not an authentication or business-data boundary.
+
+CalendarEntry continues to own scheduling and Calendar status. ManualOrder continues to own customer/service details and its `calendarEntryId` reference. Creating a Calendar `external_order` calls the existing `CreateScheduledManualOrder` application service, which creates the CalendarEntry and associated ManualOrder. `personal` and `blocked` entries remain CalendarEntry-only. Calendar display mapping resolves orders through this link; navigation passes identifiers and does not copy domain records into route state.
+
+Calendar's week pager owns horizontal gestures while the Calendar root tab has `swipeEnabled: false`. Root tab swiping remains enabled on Home, the Orders list, and Profile; it is disabled while nested Calendar/Orders routes are focused. The MonthSelector is a presentation/navigation control that changes the selected week to the one containing the chosen date; it introduces no domain entity. Nested screens use their owning native stack for back navigation. See [ADR-013](ADR-013-navigation-application-shell.md) for the decision and Android-specific details.
+
+For Android native navigation setup, `MainActivity` installs `RNScreensFragmentFactory` before calling the superclass so `react-native-screens` can avoid restoring its screen fragments as ordinary saved Activity state. The application-level `android:enableOnBackInvokedCallback="false"` is a compatibility opt-out from predictive-back dispatch while React Native/React Navigation use the `OnBackPressedDispatcher` and `BackHandler` flow. The M5 physical smoke test verified nested back flows on Android; it did not verify Activity process recreation or predictive-back animations. These native choices and their validation limits are recorded in ADR-013.
+
+M5 scope is the application shell, navigation, Calendar presentation navigation, and integration of existing Profile, Calendar, and ManualOrder behavior. It does not include Finance, Expenses, Reports, Web3, camera/media, Emergency backend, GPS, Client/Marketplace, production backend, or a root information-architecture redesign.
 
 ### Future Web3 compatibility — FUTURE
 

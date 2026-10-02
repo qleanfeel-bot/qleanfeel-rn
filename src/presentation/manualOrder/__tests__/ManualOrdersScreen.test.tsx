@@ -7,7 +7,8 @@ import type { CalendarEntry } from '../../../domain/calendar/entities/CalendarEn
 import type { CalendarRepository } from '../../../domain/calendar/repositories/CalendarRepository';
 import type { ManualOrder } from '../../../domain/manualOrder/entities/ManualOrder';
 import type { ManualOrderRepository } from '../../../domain/manualOrder/repositories/ManualOrderRepository';
-import { ManualOrdersScreen } from '../ManualOrdersScreen';
+import { ManualOrderFormScreen, ManualOrdersScreen } from '../ManualOrdersScreen';
+import { OrderDetailsScreen } from '../OrderDetailsScreen';
 
 const order: ManualOrder = {
   id: 'order-1',
@@ -52,21 +53,48 @@ function setup(options?: { orders?: ManualOrder[]; failFirstList?: boolean }) {
   const createScheduledManualOrder = {
     execute: jest.fn().mockResolvedValue(order),
   } as unknown as jest.Mocked<CreateScheduledManualOrder>;
+  const onAddOrder = jest.fn();
+  const onOpenOrder = jest.fn();
   return {
     manualOrderService,
     calendarService,
     createScheduledManualOrder,
     orderRepository,
     calendarRepository,
+    onAddOrder,
+    onOpenOrder,
   };
 }
 
 async function renderScreen(dependencies: ReturnType<typeof setup>) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
-    renderer = ReactTestRenderer.create(<ManualOrdersScreen {...dependencies} />);
+    renderer = ReactTestRenderer.create(
+      <ManualOrdersScreen
+        calendarService={dependencies.calendarService}
+        manualOrderService={dependencies.manualOrderService}
+        onAddOrder={dependencies.onAddOrder}
+        onOpenOrder={dependencies.onOpenOrder}
+      />,
+    );
   });
   return renderer;
+}
+
+async function renderForm(dependencies: ReturnType<typeof setup>) {
+  const onSaved = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ManualOrderFormScreen
+        createScheduledManualOrder={dependencies.createScheduledManualOrder}
+        initialDate="2030-04-03"
+        onCancel={jest.fn()}
+        onSaved={onSaved}
+      />,
+    );
+  });
+  return { renderer, onSaved };
 }
 
 function control(renderer: ReactTestRenderer.ReactTestRenderer, testID: string) {
@@ -97,7 +125,14 @@ describe('ManualOrdersScreen', () => {
       .mockResolvedValue([]);
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     await ReactTestRenderer.act(async () => {
-      renderer = ReactTestRenderer.create(<ManualOrdersScreen {...dependencies} />);
+      renderer = ReactTestRenderer.create(
+        <ManualOrdersScreen
+          calendarService={dependencies.calendarService}
+          manualOrderService={dependencies.manualOrderService}
+          onAddOrder={dependencies.onAddOrder}
+          onOpenOrder={dependencies.onOpenOrder}
+        />,
+      );
     });
 
     expect(control(renderer, 'manual-orders-loading')).toBeTruthy();
@@ -119,13 +154,29 @@ describe('ManualOrdersScreen', () => {
     expect(dependencies.orderRepository.getOrders).toHaveBeenCalledTimes(2);
   });
 
-  it('renders list items and loads order details with schedule from Calendar', async () => {
+  it('renders list items and requests the selected order route', async () => {
     const dependencies = setup({ orders: [order] });
     const renderer = await renderScreen(dependencies);
 
     expect(control(renderer, 'manual-order-order-1')).toBeTruthy();
     expect(JSON.stringify(renderer.toJSON())).toContain('Apartment cleaning');
     await press(renderer, 'manual-order-order-1');
+
+    expect(dependencies.onOpenOrder).toHaveBeenCalledWith(order.id);
+  });
+
+  it('shows order details with date and times supplied by the linked CalendarEntry', async () => {
+    const dependencies = setup();
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <OrderDetailsScreen
+          calendarService={dependencies.calendarService}
+          manualOrderService={dependencies.manualOrderService}
+          orderId={order.id}
+        />,
+      );
+    });
 
     expect(dependencies.orderRepository.getOrder).toHaveBeenCalledWith(order.id);
     expect(dependencies.calendarRepository.getEntry).toHaveBeenCalledWith(entry.id);
@@ -141,8 +192,7 @@ describe('ManualOrdersScreen', () => {
 
   it('validates required fields and local date/time before creating', async () => {
     const dependencies = setup();
-    const renderer = await renderScreen(dependencies);
-    await press(renderer, 'manual-orders-add-button');
+    const { renderer } = await renderForm(dependencies);
     expect(renderer.root.findAllByProps({ testID: 'manual-order-currency-input' })).toHaveLength(0);
     await press(renderer, 'manual-order-save-button');
     expect(control(renderer, 'manual-order-form-error').props.children).toContain('customer, service, and address');
@@ -159,14 +209,9 @@ describe('ManualOrdersScreen', () => {
     expect(dependencies.createScheduledManualOrder.execute).not.toHaveBeenCalled();
   });
 
-  it('saves the complete form with UTC instants and shows the resulting order', async () => {
+  it('creates the complete order with local schedule converted to UTC', async () => {
     const dependencies = setup();
-    dependencies.orderRepository.getOrders
-      .mockReset()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([order]);
-    const renderer = await renderScreen(dependencies);
-    await press(renderer, 'manual-orders-add-button');
+    const { renderer, onSaved } = await renderForm(dependencies);
     await enter(renderer, 'manual-order-customer-input', ' Ivan ');
     await enter(renderer, 'manual-order-service-input', ' Apartment cleaning ');
     await enter(renderer, 'manual-order-address-input', ' Nevsky 25 ');
@@ -188,7 +233,7 @@ describe('ManualOrdersScreen', () => {
       startAt: new Date(2030, 3, 3, 10, 0).toISOString(),
       endAt: new Date(2030, 3, 3, 12, 0).toISOString(),
     });
-    expect(control(renderer, 'manual-order-order-1')).toBeTruthy();
+    expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
   it('blocks duplicate submits while the create request is pending', async () => {
@@ -197,8 +242,7 @@ describe('ManualOrdersScreen', () => {
     dependencies.createScheduledManualOrder.execute.mockReturnValueOnce(new Promise(resolve => {
       finishSave = () => resolve(order);
     }));
-    const renderer = await renderScreen(dependencies);
-    await press(renderer, 'manual-orders-add-button');
+    const { renderer } = await renderForm(dependencies);
     await enter(renderer, 'manual-order-customer-input', 'Ivan');
     await enter(renderer, 'manual-order-service-input', 'Cleaning');
     await enter(renderer, 'manual-order-address-input', 'Nevsky 25');
@@ -225,8 +269,7 @@ describe('ManualOrdersScreen', () => {
   it('renders a safe error when order creation fails', async () => {
     const dependencies = setup();
     dependencies.createScheduledManualOrder.execute.mockRejectedValueOnce({ code: 'NetworkError' });
-    const renderer = await renderScreen(dependencies);
-    await press(renderer, 'manual-orders-add-button');
+    const { renderer } = await renderForm(dependencies);
     await enter(renderer, 'manual-order-customer-input', 'Ivan');
     await enter(renderer, 'manual-order-service-input', 'Cleaning');
     await enter(renderer, 'manual-order-address-input', 'Nevsky 25');
@@ -244,8 +287,7 @@ describe('ManualOrdersScreen', () => {
     dependencies.createScheduledManualOrder.execute.mockRejectedValueOnce({
       code: 'ScheduledOrderCompensationFailed',
     });
-    const renderer = await renderScreen(dependencies);
-    await press(renderer, 'manual-orders-add-button');
+    const { renderer } = await renderForm(dependencies);
     await enter(renderer, 'manual-order-customer-input', 'Ivan');
     await enter(renderer, 'manual-order-service-input', 'Cleaning');
     await enter(renderer, 'manual-order-address-input', 'Nevsky 25');

@@ -16,8 +16,10 @@ import type { CalendarEntry } from '../../domain/calendar/entities/CalendarEntry
 
 interface ManualOrdersScreenProps {
   readonly calendarService: CalendarService;
-  readonly createScheduledManualOrder: CreateScheduledManualOrder;
+  readonly isFocused?: boolean;
   readonly manualOrderService: ManualOrderService;
+  readonly onAddOrder: () => void;
+  readonly onOpenOrder: (orderId: string) => void;
 }
 
 interface OrderWithAppointment {
@@ -30,32 +32,20 @@ type ListState =
   | { readonly status: 'loaded'; readonly orders: OrderWithAppointment[] }
   | { readonly status: 'error' };
 
-type DetailState =
-  | { readonly status: 'loading' }
-  | { readonly status: 'loaded'; readonly value: OrderWithAppointment }
-  | { readonly status: 'error' };
-
 export function ManualOrdersScreen({
   calendarService,
-  createScheduledManualOrder,
+  isFocused = true,
   manualOrderService,
+  onAddOrder,
+  onOpenOrder,
 }: ManualOrdersScreenProps): React.JSX.Element {
   const [listState, setListState] = useState<ListState>({ status: 'loading' });
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [detailAttempt, setDetailAttempt] = useState(0);
-  const [isAdding, setIsAdding] = useState(false);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [detailState, setDetailState] = useState<DetailState>({ status: 'loading' });
-  const isMounted = useRef(true);
 
   useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
+    if (!isFocused) {
+      return undefined;
+    }
     let isCurrent = true;
     setListState({ status: 'loading' });
     manualOrderService.getOrders()
@@ -76,63 +66,7 @@ export function ManualOrdersScreen({
     return () => {
       isCurrent = false;
     };
-  }, [calendarService, loadAttempt, manualOrderService]);
-
-  useEffect(() => {
-    if (selectedOrderId === null) {
-      return;
-    }
-    let isCurrent = true;
-    setDetailState({ status: 'loading' });
-    manualOrderService.get(selectedOrderId)
-      .then(async order => ({
-        order,
-        appointment: await calendarService.getEntry(order.calendarEntryId),
-      }))
-      .then(value => {
-        if (isCurrent) {
-          setDetailState({ status: 'loaded', value });
-        }
-      })
-      .catch(() => {
-        if (isCurrent) {
-          setDetailState({ status: 'error' });
-        }
-      });
-    return () => {
-      isCurrent = false;
-    };
-  }, [calendarService, detailAttempt, manualOrderService, selectedOrderId]);
-
-  const saveOrder = async (input: Omit<CreateManualOrderInput, 'calendarEntryId'> & {
-    readonly startAt: string;
-    readonly endAt: string;
-  }): Promise<void> => {
-    await createScheduledManualOrder.execute(input);
-    if (isMounted.current) {
-      setIsAdding(false);
-      setLoadAttempt(current => current + 1);
-    }
-  };
-
-  if (selectedOrderId !== null) {
-    return (
-      <OrderDetails
-        onBack={() => setSelectedOrderId(null)}
-        state={detailState}
-        onRetry={() => setDetailAttempt(current => current + 1)}
-      />
-    );
-  }
-
-  if (isAdding) {
-    return (
-      <ManualOrderForm
-        onCancel={() => setIsAdding(false)}
-        onSave={saveOrder}
-      />
-    );
-  }
+  }, [calendarService, isFocused, loadAttempt, manualOrderService]);
 
   return (
     <ScrollView contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled" testID="manual-orders-screen">
@@ -140,7 +74,7 @@ export function ManualOrdersScreen({
         <Text style={styles.title}>Orders</Text>
         <Pressable
           accessibilityRole="button"
-          onPress={() => setIsAdding(true)}
+          onPress={onAddOrder}
           style={styles.primaryButton}
           testID="manual-orders-add-button">
           <Text style={styles.primaryButtonText}>Add Order</Text>
@@ -180,7 +114,7 @@ export function ManualOrdersScreen({
             <Pressable
               accessibilityRole="button"
               key={order.id}
-              onPress={() => setSelectedOrderId(order.id)}
+              onPress={() => onOpenOrder(order.id)}
               style={styles.orderCard}
               testID={`manual-order-${order.id}`}>
               <Text style={styles.orderTitle}>{order.customerName}</Text>
@@ -199,6 +133,7 @@ export function ManualOrdersScreen({
 }
 
 interface ManualOrderFormProps {
+  readonly initialDate?: string;
   readonly onCancel: () => void;
   readonly onSave: (input: Omit<CreateManualOrderInput, 'calendarEntryId'> & {
     readonly startAt: string;
@@ -206,8 +141,31 @@ interface ManualOrderFormProps {
   }) => Promise<void>;
 }
 
-function ManualOrderForm({ onCancel, onSave }: ManualOrderFormProps): React.JSX.Element {
-  const defaults = createDefaultSchedule();
+export interface ManualOrderFormScreenProps {
+  readonly createScheduledManualOrder: CreateScheduledManualOrder;
+  readonly initialDate?: string;
+  readonly onCancel: () => void;
+  readonly onSaved: () => void;
+}
+
+export function ManualOrderFormScreen({
+  createScheduledManualOrder,
+  initialDate,
+  onCancel,
+  onSaved,
+}: ManualOrderFormScreenProps): React.JSX.Element {
+  const saveOrder = async (input: Omit<CreateManualOrderInput, 'calendarEntryId'> & {
+    readonly startAt: string;
+    readonly endAt: string;
+  }): Promise<void> => {
+    await createScheduledManualOrder.execute(input);
+    onSaved();
+  };
+  return <ManualOrderForm initialDate={initialDate} onCancel={onCancel} onSave={saveOrder} />;
+}
+
+function ManualOrderForm({ initialDate, onCancel, onSave }: ManualOrderFormProps): React.JSX.Element {
+  const defaults = createDefaultSchedule(initialDate);
   const [customerName, setCustomerName] = useState('');
   const [serviceDescription, setServiceDescription] = useState('');
   const [serviceAddress, setServiceAddress] = useState('');
@@ -343,51 +301,7 @@ function FormField({
   );
 }
 
-interface OrderDetailsProps {
-  readonly onBack: () => void;
-  readonly onRetry: () => void;
-  readonly state: DetailState;
-}
-
-function OrderDetails({ onBack, onRetry, state }: OrderDetailsProps): React.JSX.Element {
-  return (
-    <ScrollView contentContainerStyle={styles.screen} testID="manual-order-details">
-      <Pressable accessibilityRole="button" onPress={onBack} style={styles.secondaryButton} testID="manual-order-details-back">
-        <Text style={styles.secondaryButtonText}>Back to Orders</Text>
-      </Pressable>
-      {state.status === 'loading' ? (
-        <View style={styles.messageCard} testID="manual-order-details-loading"><ActivityIndicator color="#176B58" /><Text style={styles.message}>Loading order…</Text></View>
-      ) : null}
-      {state.status === 'error' ? (
-        <View style={styles.messageCard} testID="manual-order-details-error">
-          <Text style={styles.messageTitle}>We couldn’t load this order</Text>
-          <Pressable accessibilityRole="button" onPress={onRetry} style={styles.secondaryButton} testID="manual-order-details-retry">
-            <Text style={styles.secondaryButtonText}>Retry</Text>
-          </Pressable>
-        </View>
-      ) : null}
-      {state.status === 'loaded' ? (
-        <View style={styles.detailCard} testID="manual-order-details-loaded">
-          <Text style={styles.title}>{state.value.order.customerName}</Text>
-          <DetailRow label="Service" value={state.value.order.serviceDescription} />
-          <DetailRow label="Address" value={state.value.order.serviceAddress} />
-          {state.value.order.customerPhone ? <DetailRow label="Phone" value={state.value.order.customerPhone} /> : null}
-          {state.value.order.quotedPrice ? <DetailRow label="Price" value={formatPrice(state.value.order.quotedPrice)} /> : null}
-          {state.value.order.notes ? <DetailRow label="Notes" value={state.value.order.notes} /> : null}
-          <DetailRow label="Date" value={new Date(state.value.appointment.startAt).toLocaleDateString()} />
-          <DetailRow label="Start" value={new Date(state.value.appointment.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
-          <DetailRow label="End" value={new Date(state.value.appointment.endAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
-        </View>
-      ) : null}
-    </ScrollView>
-  );
-}
-
-function DetailRow({ label, value }: { readonly label: string; readonly value: string }): React.JSX.Element {
-  return <Text style={styles.detailText}><Text style={styles.detailLabel}>{label}: </Text>{value}</Text>;
-}
-
-function createDefaultSchedule(now = new Date()): { date: string; startTime: string; endTime: string } {
+function createDefaultSchedule(initialDate?: string, now = new Date()): { date: string; startTime: string; endTime: string } {
   const start = new Date(now.getTime());
   start.setMinutes(0, 0, 0);
   start.setHours(start.getHours() + 1);
@@ -398,7 +312,7 @@ function createDefaultSchedule(now = new Date()): { date: string; startTime: str
   const end = new Date(start.getTime());
   end.setHours(end.getHours() + 2);
   return {
-    date: formatDateInput(start),
+    date: initialDate ?? formatDateInput(start),
     startTime: formatTimeInput(start),
     endTime: formatTimeInput(end),
   };
