@@ -1,6 +1,17 @@
 # Decision log
 
-This log records accepted decisions only. Proposed architecture principles are documented in [ARCHITECTURE.md](ARCHITECTURE.md), not treated as additional accepted implementation decisions here.
+This log records accepted decisions, including approved future architecture. Approval of an architecture decision does not by itself authorize implementation.
+
+## M6 ADRs — approved architecture
+
+The following decisions were approved for the M6 architecture. Approval records future boundaries and does not authorize implementation:
+
+- [ADR-014 — Canonical Order and Work Execution](ADR-014-canonical-order-and-work-execution.md): one Order model across origins; separate CalendarEntry and Cleaning facts.
+- [ADR-015 — Money and Financial Boundaries](ADR-015-money-ledger-and-geography.md): exact integer Money representation and deferred accounting/tax decisions.
+- [ADR-016 — Business Modules, APIs, Transactions, and Home Projection](ADR-016-business-modules-api-transactions-and-home.md): modular-monolith ownership, production consistency, API and Dashboard boundaries.
+- [ADR-017 — Messaging, Evidence, Disputes, and Settlement Boundaries](ADR-017-messaging-evidence-and-settlement-boundaries.md): independent future domains and optional settlement rails.
+
+Reference material: [M6 Architecture Proposal](M6_ARCHITECTURE_PROPOSAL.md) and [Domain/Data Dictionary](DOMAIN_DATA_DICTIONARY.md). These decisions do not retroactively alter M1–M5 implementation contracts.
 
 ## ADR-001 — React Native as the mobile application framework
 

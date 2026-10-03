@@ -34,6 +34,12 @@
 - The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
+## M6 business architecture — approved, implementation deferred
+
+The repository audit and approved target model are recorded in [M6_ARCHITECTURE_PROPOSAL.md](M6_ARCHITECTURE_PROPOSAL.md), with the field-level [Domain/Data Dictionary](DOMAIN_DATA_DICTIONARY.md) and ADR-014–017 indexed in [DECISIONS.md](DECISIONS.md#m6-adrs--approved-architecture). These documents define architecture only; they do not change the implemented M1–M5 system or authorize implementation work.
+
+The proposal keeps one future canonical Order across manual, Qleanfeel, and client origins, and separates Order, CalendarEntry, and Cleaning. Any future Money/FinancialEvent/Ledger behavior remains outside Home and requires a separate financial design; Dashboard is a future read projection. Future Messaging, Evidence, Disputes, and Settlement remain independent boundaries. The current ManualOrder, CalendarEntry, Profile, API contracts, and development composition remain as implemented until an explicitly approved migration. Current in-memory development HTTP handlers and sequential CalendarEntry/ManualOrder creation are not production persistence or a production transaction.
+
 ## Planned target structure — PLANNED
 
 The following is a direction for organizing future application code. It does not describe modules that currently exist.
