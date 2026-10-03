@@ -83,6 +83,10 @@ The user reports that the following physical Android smoke flows passed. No addi
 11. Calendar `external_order` creation.
 12. The created `external_order` opens through OrderDetails.
 
+## M6 Architecture — APPROVED, NOT IMPLEMENTED
+
+The M6 architecture and Domain/Data Dictionary are architecture artifacts, not software behavior. No M6 implementation or M6-specific automated/physical test result is claimed. Existing M1–M5 regression status remains as previously recorded (30 Jest suites / 276 tests); this M6 documentation finalization did not rerun those checks. Backend authorization, persistence, Order/Cleaning/Calendar consistency, and any later approved Money, tax, Dashboard, Messaging, Evidence, or Settlement behavior require tests when implementation exists. M6 does not define accounting invariants or tax calculations to test.
+
 ## Future integration tests
 
 | Check | Status | Current coverage |

@@ -13,7 +13,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M3 — Calendar | Calendar and scheduling workflows using the development in-memory HTTP composition | **COMPLETE** |
 | M4 — Manual Orders | Manual order create/list/details flow, linked Calendar scheduling, and development HTTP composition | **COMPLETE** |
 | M5 — Cleaner Application Shell & Navigation | Authenticated Home, Calendar, Orders, and Profile root surfaces with nested Calendar/Orders navigation | **COMPLETE** |
-| M6 — Emergency | Emergency workflows | **PLANNED** |
+| M6 — Backend & Business Architecture Definition | Canonical business model and future backend/API boundaries; architecture only | **ARCHITECTURE APPROVED — IMPLEMENTATION DEFERRED** |
 | M7 — Finance | Finance workflows | **PLANNED** |
 | M8 — Reports | Reporting workflows | **PLANNED** |
 | M9 — Notifications | Notification workflows | **PLANNED** |
@@ -21,7 +21,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M11 — Security hardening | Security review and hardening | **PLANNED** |
 | M12 — Production release preparation | Production readiness and release preparation | **PLANNED** |
 
-M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M6–M12 remain planned and are not claims of existing functionality or settled implementation details.
+M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M6 architecture is approved, but no M6 implementation is included. The previous Emergency placeholder is deferred without a milestone number; no later milestone number is reassigned here. M7–M12 remain planned and are not claims of existing functionality or settled implementation details.
 
 M2.1–M2.5 are complete: Profile domain, UI/editing flow, API contract, provider-independent HTTP/API infrastructure, access-token port, safe error mapping, and local development composition are implemented. No real backend integration is claimed.
 
@@ -86,6 +86,10 @@ M4 uses a development in-memory HTTP implementation only. `ManualOrder` stores a
 M5 is complete. `AuthGate` remains the authentication boundary and renders an authenticated shell backed by React Navigation. The four root surfaces are Home, Calendar, Orders, and Profile. Calendar and Orders have their own stacks, and both navigate to the shared OrderDetails implementation. The shell preserves M2-M4 domain ownership and behavior; Calendar `external_order` creation uses the existing scheduled-order application service. Navigation, gestures, Android setup, and scope are recorded in [ADR-013](ADR-013-navigation-application-shell.md).
 
 M5 passed its automated application/navigation tests and the physical Android smoke flows listed in [TEST_MATRIX.md](TEST_MATRIX.md). No production backend or new domain model was introduced.
+
+### M6 — Backend & Business Architecture Definition (APPROVED ARCHITECTURE)
+
+M6 defines the canonical Order, execution, financial, geography, backend-module, API, transaction, and Home projection boundaries before production implementation. The approved architecture and data dictionary are [M6_ARCHITECTURE_PROPOSAL.md](M6_ARCHITECTURE_PROPOSAL.md) and [DOMAIN_DATA_DICTIONARY.md](DOMAIN_DATA_DICTIONARY.md); decisions are recorded in [DECISIONS.md](DECISIONS.md). M6 does not implement a backend, database, Firebase, UI, payments, messaging, evidence storage, or Web3. Implementation remains deferred to separately authorized milestones.
 
 ### Future user experience direction (outside M5)
 
