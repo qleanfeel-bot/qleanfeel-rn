@@ -12,6 +12,54 @@ permissions:
   contents: read
 
 jobs:
+  verify-backend:
+    name: Validate production backend foundation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: qleanfeel_test
+          POSTGRES_USER: qleanfeel_test
+          POSTGRES_PASSWORD: test-only-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qleanfeel_test -d qleanfeel_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend checks
+        working-directory: backend
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql://qleanfeel_test:test-only-ci-password@127.0.0.1:5432/qleanfeel_test
+          TEST_DATABASE_URL: postgresql://qleanfeel_test:test-only-ci-password@127.0.0.1:5432/qleanfeel_test
+        run: |
+          npm run format:check
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run test:postgres
+          npm run db:check
+          npm run build
+
   verify-android:
     name: Validate and build Android APKs
     runs-on: ubuntu-latest

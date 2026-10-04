@@ -13,6 +13,13 @@ The following decisions were approved for the M6 architecture. Approval records 
 
 Reference material: [M6 Architecture Proposal](M6_ARCHITECTURE_PROPOSAL.md) and [Domain/Data Dictionary](DOMAIN_DATA_DICTIONARY.md). These decisions do not retroactively alter M1–M5 implementation contracts.
 
+## M7 — approved Production Backend Foundation
+
+- [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md): approved NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions, authorization, and production transaction boundaries. Backend implementation is deferred to M7-B.
+- [M7 Architecture Proposal](M7_ARCHITECTURE_PROPOSAL.md): canonical approved module, command, persistence, API, security, operations, and mobile migration architecture.
+
+ADR-018 records explicit M7 selections for choices that M6 deferred. It does not rewrite the M6 historical record or change existing M1–M5 code/contracts. In particular, the Firebase bearer-token plan recorded under ADR-008 is historical and is superseded for the protected production API by Qleanfeel-issued session credentials after bootstrap.
+
 ## ADR-001 — React Native as the mobile application framework
 
 - **Status:** Accepted
@@ -62,6 +69,7 @@ Reference material: [M6 Architecture Proposal](M6_ARCHITECTURE_PROPOSAL.md) and 
 - **Status:** Accepted (mobile contracts implemented; concrete adapters/backend planned)
 - **Decision:** Keep mobile Domain/Application behavior provider-agnostic, with provider SDK types and errors contained by adapters. The mobile provider and API ports and application state boundary are implemented; concrete provider/backend implementations are not. The planned backend verifies credentials behind provider-specific verifier boundaries before resolving an external identity to a Qleanfeel User. The initial planned contract uses `Authorization: Bearer <Firebase ID token>` and requires server-side verification; local token decoding does not establish validity.
 - **Planned endpoints:** `POST /v1/auth/bootstrap` for credential verification and identity/User resolution, and `GET /v1/me` for the current Qleanfeel User and authorization/business identity state. Neither endpoint currently exists.
+- **Superseding M7 decision:** The Firebase bearer credential is retained as bootstrap identity proof only. Under approved [ADR-018](ADR-018-production-backend-foundation.md), protected `/v1/*` requests use Qleanfeel-issued access credentials after bootstrap. This note preserves the original M1 plan as history and does not change implementation.
 
 ## ADR-009 — Web3 is a future capability, not part of M1
 

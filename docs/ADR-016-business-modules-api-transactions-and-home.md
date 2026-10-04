@@ -5,6 +5,8 @@
 - **Scope:** Future backend/application boundaries; no backend implementation in M6
 - **Related:** [M6 architecture proposal](M6_ARCHITECTURE_PROPOSAL.md), [Domain/Data Dictionary](DOMAIN_DATA_DICTIONARY.md)
 
+> **M7 follow-up:** The deferred runtime, persistence, auth/session, command, idempotency, and concurrency choices below are addressed by the approved [M7 Architecture Proposal](M7_ARCHITECTURE_PROPOSAL.md) and [ADR-018](ADR-018-production-backend-foundation.md). This note preserves the M6 decision record; implementation is deferred to M7-B and is not part of the M7-A documentation checkpoint.
+
 ## Context
 
 The repository currently contains mobile domain/application/repository/API boundaries and a process-local development HTTP composition. There is no production backend or persistent store. M4 scheduled-order creation performs sequential CalendarEntry and ManualOrder writes with best-effort client compensation; this is not transactional consistency.

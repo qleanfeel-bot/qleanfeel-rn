@@ -5,6 +5,8 @@
 - **Scope:** Domain and future backend/API architecture only. No backend, persistence, Firebase, UI, payment, messaging, evidence storage, or Web3 implementation is authorized by this proposal.
 - **Related documents:** [Domain/Data Dictionary](DOMAIN_DATA_DICTIONARY.md), [ADR-014](ADR-014-canonical-order-and-work-execution.md), [ADR-015](ADR-015-money-ledger-and-geography.md), [ADR-016](ADR-016-business-modules-api-transactions-and-home.md), [ADR-017](ADR-017-messaging-evidence-and-settlement-boundaries.md)
 
+> **M7 follow-up:** M6 remains the approved business-architecture baseline. The approved [M7 Production Backend Foundation](M7_ARCHITECTURE_PROPOSAL.md) and [ADR-018](ADR-018-production-backend-foundation.md) select implementation-boundary details that M6 explicitly deferred. M7 also resolves the manual-create ambiguity in §3/§10: every `CreateManualOrder` creates one initial planned Cleaning; CalendarEntry remains optional. M6's general `Order 0..N Cleaning` cardinality is unchanged. These M7 decisions do not rewrite M6 history or alter M1–M5 contracts. Implementation remains deferred to M7-B.
+
 ## 1. Decision summary
 
 This proposal adopts one canonical future `Order` model for manual, Qleanfeel-originated, and client-originated work. `ManualOrder` remains only the current M4 compatibility/creation path; future standalone cleaner workflows conceptually create `Order(origin=manual)` and do not introduce a parallel ManualOrder business model. Core Qleanfeel must remain useful to a cleaner without marketplace negotiation or a registered client. Marketplace creation/offer workflows are future layers around the same Order model.
