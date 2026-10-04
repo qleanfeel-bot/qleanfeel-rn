@@ -305,12 +305,26 @@ function mapRefreshToken(
 }
 
 function isProviderSubjectUniqueViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
+  const seen = new Set<object>();
+  let candidate = error;
+  while (typeof candidate === 'object' && candidate !== null) {
+    if (seen.has(candidate)) {
+      return false;
+    }
+    seen.add(candidate);
+
+    const databaseError = candidate as {
+      cause?: unknown;
+      code?: unknown;
+      constraint?: unknown;
+    };
+    if (
+      databaseError.code === '23505' &&
+      databaseError.constraint === 'auth_identities_provider_subject_unique'
+    ) {
+      return true;
+    }
+    candidate = databaseError.cause;
   }
-  const candidate = error as { code?: unknown; constraint?: unknown };
-  return (
-    candidate.code === '23505' &&
-    candidate.constraint === 'auth_identities_provider_subject_unique'
-  );
+  return false;
 }
