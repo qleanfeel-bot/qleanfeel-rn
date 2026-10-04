@@ -314,14 +314,20 @@ test('concurrent bootstrap for one provider subject creates one User and two ses
   });
 });
 
-test('bootstrap transaction rolls back User and AuthIdentity when identity persistence fails', async () => {
+test('bootstrap transaction rolls back all identity and session state when refresh persistence fails', async () => {
   await withAuthApplication(async ({ app, pool, subject }) => {
-    const providerSubject = subject('rollback');
+    const providerSubject = subject('rollback-final');
     await pool.query(`
-      CREATE OR REPLACE FUNCTION fail_test_identity_insert() RETURNS trigger
+      CREATE OR REPLACE FUNCTION fail_test_refresh_insert() RETURNS trigger
       LANGUAGE plpgsql AS $$
       BEGIN
-        IF NEW.provider_subject LIKE 'rollback-%' THEN
+        IF EXISTS (
+          SELECT 1
+          FROM qleanfeel.auth_sessions s
+          JOIN qleanfeel.auth_identities i ON i.user_id = s.user_id
+          WHERE s.id = NEW.session_id
+            AND i.provider_subject LIKE 'rollback-final-%'
+        ) THEN
           RAISE EXCEPTION 'forced integration-test failure';
         END IF;
         RETURN NEW;
@@ -329,25 +335,45 @@ test('bootstrap transaction rolls back User and AuthIdentity when identity persi
       $$;
     `);
     await pool.query(`
-      CREATE TRIGGER fail_test_identity_insert
-      BEFORE INSERT ON qleanfeel.auth_identities
-      FOR EACH ROW EXECUTE FUNCTION fail_test_identity_insert();
+      CREATE TRIGGER fail_test_refresh_insert
+      BEFORE INSERT ON qleanfeel.session_refresh_tokens
+      FOR EACH ROW EXECUTE FUNCTION fail_test_refresh_insert();
     `);
 
     try {
       await bootstrap(app, providerSubject).expect(500);
-      const result = await pool.query<{ count: string }>(
-        `SELECT count(*) FROM qleanfeel.users u
-         JOIN qleanfeel.auth_identities i ON i.user_id = u.id
-         WHERE i.provider_subject = $1`,
+      const result = await pool.query<{
+        users: string;
+        identities: string;
+        sessions: string;
+        refreshTokens: string;
+      }>(
+        `SELECT
+          (SELECT count(*) FROM qleanfeel.users u
+           JOIN qleanfeel.auth_identities i ON i.user_id = u.id
+           WHERE i.provider_subject = $1) AS users,
+          (SELECT count(*) FROM qleanfeel.auth_identities
+           WHERE provider_subject = $1) AS identities,
+          (SELECT count(*) FROM qleanfeel.auth_sessions s
+           JOIN qleanfeel.auth_identities i ON i.user_id = s.user_id
+           WHERE i.provider_subject = $1) AS sessions,
+          (SELECT count(*) FROM qleanfeel.session_refresh_tokens t
+           JOIN qleanfeel.auth_sessions s ON s.id = t.session_id
+           JOIN qleanfeel.auth_identities i ON i.user_id = s.user_id
+           WHERE i.provider_subject = $1) AS "refreshTokens"`,
         [providerSubject],
       );
-      assert.equal(result.rows[0]?.count, '0');
+      assert.deepEqual(result.rows[0], {
+        users: '0',
+        identities: '0',
+        sessions: '0',
+        refreshTokens: '0',
+      });
     } finally {
       await pool.query(
-        'DROP TRIGGER IF EXISTS fail_test_identity_insert ON qleanfeel.auth_identities',
+        'DROP TRIGGER IF EXISTS fail_test_refresh_insert ON qleanfeel.session_refresh_tokens',
       );
-      await pool.query('DROP FUNCTION IF EXISTS fail_test_identity_insert()');
+      await pool.query('DROP FUNCTION IF EXISTS fail_test_refresh_insert()');
     }
   });
 });
@@ -418,6 +444,45 @@ test('refresh atomically rotates the stored hash and rejects reuse of the old cr
     assert.equal(newRow?.consumed_at, null);
     assert.equal(newRow?.token_hash, newHash);
     assert.notEqual(oldRow?.token_hash, initial.body.refreshToken);
+  });
+});
+
+test('concurrent refresh requests cannot both consume the same credential', async () => {
+  await withAuthApplication(async ({ app, pool, subject }) => {
+    const initial = await bootstrap(app, subject('refresh-race')).expect(200);
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/v1/auth/refresh')
+        .send({ refreshToken: initial.body.refreshToken }),
+      request(app.getHttpServer())
+        .post('/v1/auth/refresh')
+        .send({ refreshToken: initial.body.refreshToken }),
+    ]);
+
+    assert.deepEqual(
+      [first.status, second.status].sort((left, right) => left - right),
+      [200, 401],
+    );
+    const successful = first.status === 200 ? first : second;
+    assert.equal(successful.body.session.id, initial.body.session.id);
+    assert.notEqual(successful.body.refreshToken, initial.body.refreshToken);
+
+    const tokens = await pool.query<{
+      token_hash: string;
+      consumed_at: Date | null;
+    }>(
+      `SELECT token_hash, consumed_at FROM qleanfeel.session_refresh_tokens
+       WHERE session_id = $1`,
+      [initial.body.session.id],
+    );
+    const initialHash = createHash('sha256')
+      .update(initial.body.refreshToken)
+      .digest('hex');
+    const consumedInitial = tokens.rows.find(
+      row => row.token_hash === initialHash,
+    );
+    assert.equal(tokens.rows.length, 2);
+    assert.ok(consumedInitial?.consumed_at);
   });
 });
 
