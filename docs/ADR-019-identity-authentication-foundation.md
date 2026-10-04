@@ -2,7 +2,7 @@
 
 - **Status:** Accepted implementation decision for M7-B.2; follows approved M7-A / ADR-018 architecture
 - **Scope:** Internal User, external AuthIdentity, per-device AuthSession, Firebase identity proof, Qleanfeel access credentials, refresh rotation, logout, and `/v1/me`
-- **Related:** [M7 Architecture Proposal](M7_ARCHITECTURE_PROPOSAL.md), [ADR-018](ADR-018-production-backend-foundation.md)
+- **Related:** [M7 Architecture Proposal](M7_ARCHITECTURE_PROPOSAL.md), [ADR-018](ADR-018-production-backend-foundation.md), [ADR-020](ADR-020-authorization-foundation.md)
 
 ## Decision
 
