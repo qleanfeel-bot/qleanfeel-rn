@@ -88,7 +88,8 @@ test('authorization application code has no HTTP, persistence, or provider impor
     '../src/application/authorization/resource-authorization-policy.ts',
     '../src/application/authorization/authorization-errors.ts',
   ];
-  const forbiddenImport = /from\s+['"](?:@nestjs\/|drizzle-orm|pg|firebase-admin)/;
+  const forbiddenImport =
+    /from\s+['"](?:@nestjs\/|drizzle-orm|pg|firebase-admin)/;
 
   for (const file of authorizationFiles) {
     const source = readFileSync(new URL(file, import.meta.url), 'utf8');
