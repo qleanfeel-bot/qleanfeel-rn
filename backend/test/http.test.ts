@@ -76,3 +76,26 @@ test('readiness checks PostgreSQL and returns unavailable when its query fails',
     await moduleRef.close();
   }
 });
+
+test('authentication endpoints validate input and protected endpoints require a credential', async () => {
+  const { app, moduleRef } = await createHttpApplication({
+    query: async () => ({ rows: [] }),
+    end: async () => undefined,
+  });
+
+  try {
+    await request(app.getHttpServer())
+      .post('/v1/auth/bootstrap')
+      .send({ firebaseIdToken: '' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/v1/auth/refresh')
+      .send({ refreshToken: '' })
+      .expect(400);
+    await request(app.getHttpServer()).get('/v1/me').expect(401);
+    await request(app.getHttpServer()).post('/v1/auth/logout').expect(401);
+  } finally {
+    await app.close();
+    await moduleRef.close();
+  }
+});

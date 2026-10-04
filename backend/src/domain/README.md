@@ -1,3 +1,3 @@
 # Domain layer boundary
 
-M7-B.1 introduces no business entities. Later domain modules belong here as framework-free TypeScript: no NestJS, HTTP, Drizzle, PostgreSQL driver, or persistence-row dependencies. Add a domain module only with its separately scoped business implementation step.
+M7-B.2 adds framework/provider-independent `User`, `AuthIdentity`, `AuthSession`, and refresh-token record concepts. Domain types remain plain TypeScript and do not depend on Firebase, JWT, NestJS, HTTP, Drizzle, PostgreSQL drivers, or persistence rows. Profile and business modules remain out of scope until their separately scoped implementation steps.

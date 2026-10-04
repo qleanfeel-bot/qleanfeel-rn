@@ -5,6 +5,10 @@ export interface BackendConfig {
   readonly port: number;
   readonly databaseUrl: string;
   readonly databasePoolMax: number;
+  readonly firebaseProjectId: string | undefined;
+  readonly accessTokenSigningSecret: string | undefined;
+  readonly authAccessTokenTtlSeconds: number;
+  readonly authRefreshTokenTtlSeconds: number;
 }
 
 export const BACKEND_CONFIG = Symbol('BACKEND_CONFIG');
@@ -41,6 +45,15 @@ export function loadBackendConfig(
     throw new Error('DATABASE_URL must use the PostgreSQL protocol.');
   }
 
+  const accessTokenSigningSecret =
+    environment.ACCESS_TOKEN_SIGNING_SECRET || undefined;
+  if (
+    accessTokenSigningSecret !== undefined &&
+    Buffer.byteLength(accessTokenSigningSecret, 'utf8') < 32
+  ) {
+    throw new Error('ACCESS_TOKEN_SIGNING_SECRET must be at least 32 bytes.');
+  }
+
   return {
     environment: environmentName as RuntimeEnvironment,
     port: parseInteger(environment.PORT, 3000, 'PORT', 1, 65535),
@@ -51,6 +64,22 @@ export function loadBackendConfig(
       'DATABASE_POOL_MAX',
       1,
       100,
+    ),
+    firebaseProjectId: environment.FIREBASE_PROJECT_ID || undefined,
+    accessTokenSigningSecret,
+    authAccessTokenTtlSeconds: parseInteger(
+      environment.AUTH_ACCESS_TOKEN_TTL_SECONDS,
+      300,
+      'AUTH_ACCESS_TOKEN_TTL_SECONDS',
+      30,
+      3600,
+    ),
+    authRefreshTokenTtlSeconds: parseInteger(
+      environment.AUTH_REFRESH_TOKEN_TTL_SECONDS,
+      2_592_000,
+      'AUTH_REFRESH_TOKEN_TTL_SECONDS',
+      600,
+      31_536_000,
     ),
   };
 }
