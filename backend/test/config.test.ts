@@ -13,6 +13,10 @@ test('loads explicit backend configuration with safe defaults', () => {
       port: 3000,
       databaseUrl: 'postgresql://test:test@localhost:5432/qleanfeel_test',
       databasePoolMax: 10,
+      firebaseProjectId: undefined,
+      accessTokenSigningSecret: undefined,
+      authAccessTokenTtlSeconds: 300,
+      authRefreshTokenTtlSeconds: 2_592_000,
     },
   );
 });
@@ -49,4 +53,16 @@ test('rejects invalid environment names, database protocols, and numeric setting
 
 test('requires a database URL for application startup', () => {
   assert.throws(() => loadBackendConfig({ APP_ENV: 'test' }), /DATABASE_URL/);
+});
+
+test('requires a strong access-token signing secret when one is configured', () => {
+  assert.throws(
+    () =>
+      loadBackendConfig({
+        APP_ENV: 'test',
+        DATABASE_URL: 'postgresql://test:test@localhost:5432/qleanfeel_test',
+        ACCESS_TOKEN_SIGNING_SECRET: 'too-short',
+      }),
+    /at least 32 bytes/,
+  );
 });
