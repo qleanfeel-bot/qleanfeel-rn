@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { UnitOfWorkContext } from '../../application/ports/unit-of-work.js';
@@ -36,7 +36,10 @@ export class PostgresAuthenticationRepositories
     AuthSessionRepository,
     SessionRefreshTokenRepository
 {
-  constructor(private readonly contextRegistry: TransactionContextRegistry) {}
+  constructor(
+    @Inject(TransactionContextRegistry)
+    private readonly contextRegistry: TransactionContextRegistry,
+  ) {}
 
   async findUserById(
     id: string,

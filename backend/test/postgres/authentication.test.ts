@@ -82,7 +82,6 @@ async function createAuthApplication() {
         await deleteIdentitySubject(pool, subject);
       }
       await app.close();
-      await moduleRef.close();
     },
   };
 }
