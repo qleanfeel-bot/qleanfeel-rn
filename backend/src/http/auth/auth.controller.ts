@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   HttpCode,
   HttpStatus,
+  Inject,
   Post,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -29,8 +30,11 @@ import { QleanfeelAccessGuard } from './qleanfeel-access.guard.js';
 @Controller('auth')
 export class AuthController {
   constructor(
+    @Inject(BootstrapAuthSession)
     private readonly bootstrap: BootstrapAuthSession,
+    @Inject(RefreshAuthSession)
     private readonly refresh: RefreshAuthSession,
+    @Inject(LogoutAuthSession)
     private readonly logout: LogoutAuthSession,
   ) {}
 

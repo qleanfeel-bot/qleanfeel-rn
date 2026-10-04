@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  Inject,
   Injectable,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -22,7 +23,10 @@ interface AuthenticatedRequest {
 
 @Injectable()
 export class QleanfeelAccessGuard implements CanActivate {
-  constructor(private readonly authenticate: AuthenticateAccessCredential) {}
+  constructor(
+    @Inject(AuthenticateAccessCredential)
+    private readonly authenticate: AuthenticateAccessCredential,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();

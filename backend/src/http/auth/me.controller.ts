@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Inject,
   ServiceUnavailableException,
   UnauthorizedException,
   UseGuards,
@@ -14,7 +15,9 @@ import { QleanfeelAccessGuard } from './qleanfeel-access.guard.js';
 @Controller('me')
 @UseGuards(QleanfeelAccessGuard)
 export class MeController {
-  constructor(private readonly getCurrentUser: GetCurrentUser) {}
+  constructor(
+    @Inject(GetCurrentUser) private readonly getCurrentUser: GetCurrentUser,
+  ) {}
 
   @Get()
   async getMe(
