@@ -42,6 +42,9 @@ test('UnitOfWork shares one live PostgreSQL transaction context and rejects nest
         unitOfWork.execute(async () => undefined),
         /Nested UnitOfWork transactions are not supported/,
       );
+
+      assert.equal(contextRegistry.get(context), transaction);
+      await transaction.execute(sql`SELECT 1`);
     });
 
     const expiredContext = completedContext;

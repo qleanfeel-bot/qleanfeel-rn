@@ -25,7 +25,7 @@ export class PostgresUnitOfWork extends UnitOfWork {
     super();
   }
 
-  execute<T>(
+  async execute<T>(
     operation: (context: UnitOfWorkContext) => Promise<T>,
   ): Promise<T> {
     if (this.activeContext.getStore()) {
