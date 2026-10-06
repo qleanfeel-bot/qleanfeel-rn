@@ -76,8 +76,11 @@ test('Qleanfeel access credentials contain only verified principal claims and re
   assert.equal(payload.sub, principal.userId);
   assert.equal(payload.sid, principal.sessionId);
   assert.equal('firebaseUid' in payload, false);
+  const [header, tokenPayload, signature] = token.split('.');
+  assert.ok(header && tokenPayload && signature);
+  const alteredSignature = `${signature[0] === 'A' ? 'B' : 'A'}${signature.slice(1)}`;
   await assert.rejects(
-    service.verify(`${token.slice(0, -1)}x`),
+    service.verify(`${header}.${tokenPayload}.${alteredSignature}`),
     InvalidAccessCredentialError,
   );
 });

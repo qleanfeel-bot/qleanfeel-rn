@@ -83,7 +83,7 @@ The user reports that the following physical Android smoke flows passed. No addi
 11. Calendar `external_order` creation.
 12. The created `external_order` opens through OrderDetails.
 
-## M7-B.1–B.3 Backend Foundation — IMPLEMENTED
+## M7 Backend Foundation and M7-B.4 Create Order — IMPLEMENTED / DRAFT PR #11
 
 The backend verification suite uses `node:test` through `tsx --test`. Unit/HTTP coverage includes backend configuration, identity use cases, HTTP behavior, persistence bootstrap, and the M7-B.3 authorization boundary. PostgreSQL integration coverage is in `backend/test/postgres/` for readiness, UnitOfWork, and authentication/session persistence; it requires the repository's `TEST_DATABASE_URL` setup. The configured [CI workflow](../.github/workflows/ci.yml) runs backend format, lint, typecheck, unit, PostgreSQL integration, and build checks.
 
@@ -92,17 +92,17 @@ The backend verification suite uses `node:test` through `tsx --test`. Unit/HTTP 
 | Backend identity and authentication unit/HTTP tests | **IMPLEMENTED** | `backend/test/identity.test.ts` and `backend/test/http.test.ts`; bootstrap, refresh, logout, access authentication, `/v1/me`, and error behavior. |
 | Authorization boundary unit tests | **IMPLEMENTED** | `backend/test/authorization.test.ts`; framework-independent permit/deny and denial semantics. No business resource policy is represented yet. |
 | PostgreSQL authentication and UnitOfWork integration tests | **IMPLEMENTED** | `backend/test/postgres/authentication.test.ts`, `unit-of-work.test.ts`, and `readiness.test.ts`. These verify implemented identity/persistence behavior, not business tables. |
-| M7-B.4 CreateManualOrder tests | **PLANNED** | No Order, OrderTerms, Cleaning, or Calendar backend use case exists yet. Add unit, HTTP, and PostgreSQL atomicity/rollback coverage with its separately approved implementation. |
+| M7-B.4 CreateManualOrder tests | **IMPLEMENTED IN DRAFT PR #11** | `backend/test/orders.test.ts` covers Order/terms/Cleaning/schedule invariants and application orchestration. `backend/test/postgres/orders.test.ts` exercises authenticated HTTP creation, 401/403/validation behavior, persisted scheduled and unscheduled graphs, one Cleaning per Order, Calendar ownership, and rollback after an inserted CalendarEntry fails. PostgreSQL execution requires the configured PostgreSQL 18 test database. |
 
 ## M6 Architecture — APPROVED, DESIGN ONLY
 
-The M6 architecture and Domain/Data Dictionary are design artifacts, not an M6 software implementation. M7-B.1–B.3 delivered selected backend foundations and are covered above. Production Order/Cleaning/Calendar consistency and later Money, tax, Dashboard, Messaging, Evidence, or Settlement behavior remain unimplemented and require tests when approved code exists. M6 does not define accounting invariants or tax calculations to test.
+The M6 architecture and Domain/Data Dictionary are design artifacts, not an M6 software implementation. M7-B.1–B.3 delivered the backend foundations and M7-B.4 adds the first production Order/Cleaning/Calendar consistency path on Draft PR #11. Later Money, tax, Dashboard, Messaging, Evidence, and Settlement behavior remains unimplemented and requires tests when approved code exists. M6 does not define accounting invariants or tax calculations to test.
 
 ## Future integration tests
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Production mobile-to-backend integration and business-resource end-to-end tests | **PLANNED** | Backend auth and PostgreSQL test harnesses exist, but the mobile app still uses its development composition and production Profile/Order/Cleaning/Calendar APIs do not exist. Define coverage with the relevant integration slices. |
+| Production mobile-to-backend integration and business-resource end-to-end tests | **PLANNED** | The mobile app still uses its development composition; this milestone adds only the production Order create path, not a full Profile/Order/Cleaning/Calendar API. Define mobile migration coverage in a later slice. |
 
 ## Future BLE tests
 

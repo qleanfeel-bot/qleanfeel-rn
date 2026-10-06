@@ -1,0 +1,3 @@
+ALTER TABLE "qleanfeel"."order_terms" DROP CONSTRAINT "order_terms_quote_amount_check";--> statement-breakpoint
+ALTER TABLE "qleanfeel"."order_terms" ALTER COLUMN "quoted_price_amount_minor" SET DATA TYPE bigint;--> statement-breakpoint
+ALTER TABLE "qleanfeel"."order_terms" ADD CONSTRAINT "order_terms_quote_amount_check" CHECK ("qleanfeel"."order_terms"."quoted_price_amount_minor" IS NULL OR ("qleanfeel"."order_terms"."quoted_price_amount_minor" >= 0 AND "qleanfeel"."order_terms"."quoted_price_amount_minor" <= 9007199254740991));

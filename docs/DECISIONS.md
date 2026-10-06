@@ -22,7 +22,7 @@ Reference material: [M6 Architecture Proposal](M6_ARCHITECTURE_PROPOSAL.md) and 
 - [M7 Architecture Proposal](M7_ARCHITECTURE_PROPOSAL.md): canonical approved module, command, persistence, API, security, operations, and mobile migration architecture.
 - [Living Architecture Map](ARCHITECTURE_MAP.md): visual current/planned structure and data-flow guide; ADRs remain the decision source.
 
-M7-B.1 through M7-B.3 are merged. M7-B.4 architecture is recorded in ADR-021; its production implementation has not started. ADR-018 records explicit M7 selections for choices that M6 deferred. It does not rewrite the M6 historical record or change existing M1–M5 mobile contracts. In particular, the Firebase bearer-token plan recorded under ADR-008 is historical and is superseded for the protected production API by Qleanfeel-issued session credentials after bootstrap.
+M7-B.1 through M7-B.3 are merged. M7-B.4 implementation is in Draft PR #11 and is not merged; ADR-021 remains its approved decision source. ADR-018 records explicit M7 selections for choices that M6 deferred. It does not rewrite the M6 historical record or change existing M1–M5 mobile contracts. In particular, the Firebase bearer-token plan recorded under ADR-008 is historical and is superseded for the protected production API by Qleanfeel-issued session credentials after bootstrap.
 
 ## ADR-001 — React Native as the mobile application framework
 

@@ -2,7 +2,7 @@
 
 This document is a visual guide to the repository architecture. It distinguishes code currently present in the repository from approved M7-B.4 work and later product ideas. “Current” does not claim that a component is deployed.
 
-The map does not replace architectural decisions or milestone status. See [ADRs](DECISIONS.md) for decisions and [ROADMAP.md](ROADMAP.md) for milestone status. The current baseline is `main` after M7-B.3; M7-B.4 is architecture-approved and its production implementation has not started.
+The map does not replace architectural decisions or milestone status. See [ADRs](DECISIONS.md) for decisions and [ROADMAP.md](ROADMAP.md) for milestone status. `main` contains M7-B.3; M7-B.4 is implemented on Draft PR #11 and is not merged.
 
 ## 1. System Context
 
@@ -10,8 +10,8 @@ The map does not replace architectural decisions or milestone status. See [ADRs]
 flowchart LR
   Mobile["Mobile App<br/>CURRENT IN REPOSITORY<br/>development composition"]
   DevHTTP["Development HTTP handlers<br/>CURRENT IN REPOSITORY<br/>in-memory"]
-  Backend["Qleanfeel Backend API<br/>CURRENT IN REPOSITORY<br/>health, identity/authentication, /me"]
-  DB[("PostgreSQL<br/>CURRENT IN REPOSITORY<br/>identity/session schema")]
+  Backend["Qleanfeel Backend API<br/>CURRENT IN REPOSITORY<br/>health, identity/authentication, /me, POST /v1/me/orders"]
+  DB[("PostgreSQL<br/>CURRENT IN REPOSITORY<br/>identity/session and M7-B.4 business schemas")]
   Firebase["Firebase<br/>CURRENT EXTERNAL PROVIDER<br/>identity proof at bootstrap"]
   Client["Client App<br/>FUTURE"]
   Other["Finance/accounting, evidence/photos,<br/>notifications, Web3, external integrations<br/>FUTURE"]
@@ -101,7 +101,7 @@ flowchart LR
     Features --> Contracts --> Memory
   end
 
-  subgraph B4["PLANNED FOR M7-B.4 — PRODUCTION CREATE PATH"]
+  subgraph B4["IMPLEMENTED IN DRAFT PR #11 — PRODUCTION CREATE PATH"]
     OrdersFeature["Orders feature"]
     Request["Client input: business terms<br/>optional schedule.startAt / schedule.endAt"]
     Route["POST /v1/me/orders"]
@@ -118,7 +118,7 @@ flowchart LR
   Memory -.->|"later client contract migration"| Route
 ```
 
-For the planned create request, client-controlled business intent includes customer/service terms and an optional `schedule` containing `startAt` and `endAt`. Those are requested appointment times, not server-authored metadata. The server derives identity and security facts: `createdByUserId` from `AuthenticatedPrincipal.userId`, `origin=manual`, generated IDs, `createdAt`, `updatedAt`, event-recording timestamps, version, lifecycle status, and any assignment/ownership fact. The client cannot assert those values.
+For the create request, client-controlled business intent includes customer/service terms and an optional `schedule` containing `startAt` and `endAt`. Those are requested appointment times, not server-authored metadata. The server derives identity and security facts: `createdByUserId` from `AuthenticatedPrincipal.userId`, `origin=manual`, generated IDs, `createdAt`, `updatedAt`, event-recording timestamps, version, lifecycle status, and any assignment/ownership fact. The client cannot assert those values.
 
 The initial Cleaning assignment, if present in this slice, is derived from the same principal. No separate account role, `isCleaner` flag, or capability source is implied. The response is a canonical Order API DTO; it must not expose persistence rows or internal domain objects. Exact DTO fields remain in the B4 API implementation contract, not in this map.
 
@@ -128,37 +128,47 @@ The initial Cleaning assignment, if present in this slice, is derived from the s
 flowchart TB
   subgraph Http["HTTP / NestJS — CURRENT IN REPOSITORY"]
     IdentityHTTP["Identity HTTP<br/>bootstrap, refresh, logout, /me"]
+    OrdersHTTP["Orders HTTP<br/>POST /v1/me/orders — DRAFT PR #11"]
     Health["Health"]
   end
 
   subgraph Application["Application — CURRENT FOUNDATION"]
     IdentityUC["Identity use cases"]
+    OrdersUC["CreateManualOrder<br/>and Calendar schedule port — DRAFT PR #11"]
     AuthZ["Authorization decision, denial,<br/>resource-policy boundary"]
     Ports["Repository, credential, verifier,<br/>clock, ID, UnitOfWork ports"]
   end
 
   subgraph Domain["Domain — CURRENT IN REPOSITORY"]
     IdentityDomain["User, AuthIdentity,<br/>AuthSession, refresh-token concepts"]
+    BusinessDomain["Order, OrderTerms,<br/>Cleaning, CalendarEntry — DRAFT PR #11"]
   end
 
   subgraph Infrastructure["Infrastructure — CURRENT IN REPOSITORY"]
     FirebaseAdapter["Firebase identity-proof verifier"]
     CredentialAdapters["Qleanfeel access / refresh adapters"]
     PostgresAdapters["PostgreSQL identity repositories<br/>and UnitOfWork"]
+    BusinessAdapters["PostgreSQL business repositories<br/>— DRAFT PR #11"]
   end
 
-  DB[("PostgreSQL identity/session schema")]
+  DB[("PostgreSQL identity/session and<br/>Order/Cleaning/Calendar schema")]
   IdentityHTTP --> IdentityUC
+  OrdersHTTP --> OrdersUC
+  OrdersUC --> BusinessDomain
+  OrdersUC --> AuthZ
+  OrdersUC --> Ports
   IdentityUC --> IdentityDomain
   IdentityUC --> Ports
   FirebaseAdapter -->|"implements verifier port"| Ports
   CredentialAdapters -->|"implement credential ports"| Ports
   PostgresAdapters -->|"implement repository / UoW ports"| Ports
+  BusinessAdapters -->|"implement business repository ports"| Ports
   PostgresAdapters --> DB
+  BusinessAdapters --> DB
 
-  Orders["Orders — PLANNED FOR M7-B.4"]
-  Cleaning["Cleaning — PLANNED FOR M7-B.4"]
-  Calendar["Calendar backend — PLANNED<br/>no full Calendar API in B4"]
+  Orders["Orders create command — IMPLEMENTED IN DRAFT PR #11"]
+  Cleaning["Initial Cleaning persistence — IMPLEMENTED IN DRAFT PR #11"]
+  Calendar["Calendar scheduling port — IMPLEMENTED IN DRAFT PR #11<br/>no full Calendar API"]
   Profile["Profile backend — FUTURE"]
   Orders -.-> Application
   Cleaning -.-> Application
@@ -166,7 +176,7 @@ flowchart TB
   Profile -.-> Application
 ```
 
-Authorization is Application code, not a separate NestJS module. The existing policy boundary does not load resources, use infrastructure, or manage transactions. Business modules and their policies will be introduced with real use cases; this diagram does not imply that they already exist.
+Authorization is Application code, not a separate NestJS module. The policy does not load resources, use infrastructure, or manage transactions. M7-B.4 introduces its operation-specific policy with the first business use case; other business modules remain future work.
 
 ## 5. Business Data Model
 
@@ -182,7 +192,7 @@ flowchart LR
     AuthSession -->|"1 to 0..N rotated tokens"| Refresh
   end
 
-  subgraph Planned["PLANNED CANONICAL BUSINESS DATA"]
+  subgraph Business["M7-B.4 BUSINESS DATA — IMPLEMENTED IN DRAFT PR #11"]
     Order["Order"]
     Terms["OrderTerms<br/>initial terms snapshot"]
     Cleaning["Cleaning"]
@@ -201,27 +211,28 @@ The diagram omits future customer, finance, evidence, event-history, and capabil
 
 ```mermaid
 flowchart TB
-  Request["POST /v1/me/orders<br/>PLANNED FOR M7-B.4"] --> Guard["Qleanfeel access guard<br/>CURRENT FOUNDATION"]
+  Request["POST /v1/me/orders<br/>IMPLEMENTED IN DRAFT PR #11"] --> Guard["Qleanfeel access guard<br/>CURRENT FOUNDATION"]
   Guard --> Principal["AuthenticatedPrincipal<br/>server checked current account status"]
-  Principal --> Policy["CreateManualOrder policy<br/>permit active principal — PLANNED FOR M7-B.4"]
-  Policy --> UseCase["CreateManualOrder application use case<br/>PLANNED FOR M7-B.4"]
+  Principal --> Policy["CreateManualOrder policy<br/>active account is checked by guard"]
+  Policy --> UseCase["CreateManualOrder application use case<br/>IMPLEMENTED IN DRAFT PR #11"]
 
-  subgraph UOW["PLANNED FOR M7-B.4 — ONE UnitOfWork / ONE database transaction"]
+  subgraph UOW["IMPLEMENTED IN DRAFT PR #11 — ONE UnitOfWork / ONE database transaction"]
     SaveOrder["Persist Order<br/>origin=manual; status=confirmed<br/>creator=principal.userId"]
     SaveTerms["Persist initial OrderTerms"]
+    SaveCleaning["Persist exactly one initial Cleaning<br/>status=planned"]
     Schedule{"schedule supplied?"}
-    SaveEntry["Calendar-owned port persists CalendarEntry"]
-    SaveCleaning["Persist exactly one initial Cleaning<br/>status=planned; optional CalendarEntry reference"]
+    SaveEntry["Calendar application port persists CalendarEntry"]
+    Associate["Associate entry from Cleaning side"]
     Commit["Commit"]
     Rollback["Rollback every write"]
-    SaveOrder --> SaveTerms --> Schedule
-    Schedule -->|"yes"| SaveEntry --> SaveCleaning
-    Schedule -->|"no"| SaveCleaning
-    SaveCleaning --> Commit
+    SaveOrder --> SaveTerms --> SaveCleaning --> Schedule
+    Schedule -->|"yes"| SaveEntry --> Associate --> Commit
+    Schedule -->|"no"| Commit
     SaveOrder -->|"failure"| Rollback
     SaveTerms -->|"failure"| Rollback
     SaveEntry -->|"failure"| Rollback
     SaveCleaning -->|"failure"| Rollback
+    Associate -->|"failure"| Rollback
   end
 
   UseCase --> SaveOrder
@@ -258,7 +269,8 @@ This backend flow is implemented in the repository. The current mobile app still
 | Notation | Meaning |
 | --- | --- |
 | `CURRENT IN REPOSITORY` | Implemented on `main`; this does not assert deployment. |
-| `PLANNED FOR M7-B.4` | Approved architecture, not yet implemented. |
+| `IMPLEMENTED IN DRAFT PR #11` | Implemented on the feature branch, not yet merged to `main`. |
+| `PLANNED FOR M7-B.4` | Approved work outside the implementation currently in Draft PR #11. |
 | `FUTURE` | Outside M7-B.4 and not implemented. |
 | Solid arrow | The call, dependency, or data flow shown; status comes from the node or containing boundary. |
 | Dashed arrow | Planned or future interaction/data flow. |

@@ -14,7 +14,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M4 — Manual Orders | Manual order create/list/details flow, linked Calendar scheduling, and development HTTP composition | **COMPLETE** |
 | M5 — Cleaner Application Shell & Navigation | Authenticated Home, Calendar, Orders, and Profile root surfaces with nested Calendar/Orders navigation | **COMPLETE** |
 | M6 — Backend & Business Architecture Definition | Canonical business model and future backend/API boundaries; architecture only | **ARCHITECTURE APPROVED — IMPLEMENTATION DEFERRED** |
-| M7 — Production Backend Foundation | Production modular-monolith architecture, persistence/auth boundaries, canonical commands, and implementation plan | **M7-B.1–B.3 COMPLETE; M7-B.4 ARCHITECTURE APPROVED, IMPLEMENTATION NOT STARTED** |
+| M7 — Production Backend Foundation | Production modular-monolith architecture, persistence/auth boundaries, canonical commands, and implementation plan | **M7-B.1–B.3 COMPLETE; M7-B.4 IMPLEMENTED IN DRAFT PR #11 — NOT MERGED** |
 | M8 — Reports | Reporting workflows | **PLANNED** |
 | M9 — Notifications | Notification workflows | **PLANNED** |
 | M10 — Client/Marketplace foundations | Initial client and marketplace foundations | **PLANNED** |
@@ -101,14 +101,14 @@ M7 selected NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions
 
 ### M7-B.4 — Canonical Order + Initial Cleaning + Optional Calendar Scheduling
 
-Architecture is approved in [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md). It defines `POST /v1/me/orders`, one initial Cleaning per successful `CreateManualOrder`, optional Calendar scheduling, and one atomic UnitOfWork. Production business code has not started. This slice has no generic API idempotency; that work is explicitly deferred to a future API reliability slice without an assigned milestone number. M7 is not a Finance milestone; Money/Accounting and tax policy remain deferred future work.
+Architecture is approved in [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md). The implementation in Draft PR #11 adds `POST /v1/me/orders`, one initial Cleaning per successful `CreateManualOrder`, optional Calendar scheduling, and one atomic UnitOfWork. The branch is not merged. This slice has no generic API idempotency; that work is explicitly deferred to a future API reliability slice without an assigned milestone number. M7 is not a Finance milestone; Money/Accounting and tax policy remain deferred future work.
 
 | M7-B slice | Scope | Status |
 | --- | --- | --- |
 | M7-B.1 — Production Backend Foundation | NestJS composition, PostgreSQL/Drizzle persistence boundary, and UnitOfWork | **COMPLETE — MERGED** |
 | M7-B.2 — Identity + Authentication Foundation | Firebase identity proof, Qleanfeel sessions/credentials, and protected identity endpoints | **COMPLETE — MERGED** |
 | M7-B.3 — Authorization Foundation | Framework-independent Application authorization boundary | **COMPLETE — MERGED** |
-| M7-B.4 — Canonical Order + Initial Cleaning + Optional Calendar Scheduling | Architecture in ADR-021; atomic first business command | **ARCHITECTURE APPROVED — IMPLEMENTATION NOT STARTED** |
+| M7-B.4 — Canonical Order + Initial Cleaning + Optional Calendar Scheduling | ADR-021 production command, persistence, guarded endpoint, and transaction tests | **IMPLEMENTED — DRAFT PR #11; NOT MERGED** |
 
 ## Remote-first development
 

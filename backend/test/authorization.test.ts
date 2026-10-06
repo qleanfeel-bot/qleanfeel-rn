@@ -10,6 +10,7 @@ import {
 import type { ResourceAuthorizationPolicy } from '../src/application/authorization/resource-authorization-policy.js';
 import { InvalidAccessCredentialError } from '../src/application/identity/identity-errors.js';
 import type { AuthenticatedPrincipal } from '../src/application/identity/authenticated-principal.js';
+import { CreateManualOrderPolicy } from '../src/application/orders/create-manual-order-policy.js';
 
 type Operation = 'read' | 'update';
 
@@ -80,6 +81,20 @@ test('authorization denial is distinct from authentication failure', () => {
   assert.equal(denial.name, 'AuthorizationDeniedError');
   assert.ok(denial instanceof Error);
   assert.ok(!(denial instanceof InvalidAccessCredentialError));
+});
+
+test('M7-B.4 permits an authenticated active principal without role or capability claims', () => {
+  assert.deepEqual(
+    new CreateManualOrderPolicy().evaluate(principal, 'create_manual_order'),
+    PERMIT,
+  );
+  assert.deepEqual(
+    new CreateManualOrderPolicy().evaluate(
+      { userId: '', sessionId: principal.sessionId },
+      'create_manual_order',
+    ),
+    DENY,
+  );
 });
 
 test('authorization application code has no HTTP, persistence, or provider imports', () => {
