@@ -14,14 +14,14 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M4 — Manual Orders | Manual order create/list/details flow, linked Calendar scheduling, and development HTTP composition | **COMPLETE** |
 | M5 — Cleaner Application Shell & Navigation | Authenticated Home, Calendar, Orders, and Profile root surfaces with nested Calendar/Orders navigation | **COMPLETE** |
 | M6 — Backend & Business Architecture Definition | Canonical business model and future backend/API boundaries; architecture only | **ARCHITECTURE APPROVED — IMPLEMENTATION DEFERRED** |
-| M7 — Production Backend Foundation | Production modular-monolith architecture, persistence/auth boundaries, canonical commands, and implementation plan | **ARCHITECTURE APPROVED — M7-A DOCUMENTATION CHECKPOINT; IMPLEMENTATION DEFERRED TO M7-B** |
+| M7 — Production Backend Foundation | Production modular-monolith architecture, persistence/auth boundaries, canonical commands, and implementation plan | **M7-B.1–B.3 COMPLETE; M7-B.4 ARCHITECTURE APPROVED, IMPLEMENTATION NOT STARTED** |
 | M8 — Reports | Reporting workflows | **PLANNED** |
 | M9 — Notifications | Notification workflows | **PLANNED** |
 | M10 — Client/Marketplace foundations | Initial client and marketplace foundations | **PLANNED** |
 | M11 — Security hardening | Security review and hardening | **PLANNED** |
 | M12 — Production release preparation | Production readiness and release preparation | **PLANNED** |
 
-M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The app still uses an in-memory development composition; this is not production authentication. Real Firebase/backend integration, production credential/session handling, and production signing remain future work. M6 architecture is approved, but no M6 implementation is included. The previous Emergency placeholder is deferred without a milestone number; no later milestone number is reassigned here. M7 architecture is human-approved; this M7-A documentation checkpoint contains no implementation, which is deferred to M7-B. M8–M12 remain planned and are not claims of existing functionality or settled implementation details.
+M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The mobile app still uses an in-memory development composition; it is not connected to the production backend or a mobile Firebase adapter. M7-B.2 backend authentication and Firebase identity-proof verification are implemented separately. Production mobile credential integration and signing remain future work. M6 remains architecture-only; selected backend foundations were implemented under M7-B. The previous Emergency placeholder is deferred without a milestone number; no later milestone number is reassigned here. M8–M12 remain planned and are not claims of existing functionality or settled implementation details.
 
 M2.1–M2.5 are complete: Profile domain, UI/editing flow, API contract, provider-independent HTTP/API infrastructure, access-token port, safe error mapping, and local development composition are implemented. No real backend integration is claimed.
 
@@ -89,17 +89,26 @@ M5 passed its automated application/navigation tests and the physical Android sm
 
 ### M6 — Backend & Business Architecture Definition (APPROVED ARCHITECTURE)
 
-M6 defines the canonical Order, execution, financial, geography, backend-module, API, transaction, and Home projection boundaries before production implementation. The approved architecture and data dictionary are [M6_ARCHITECTURE_PROPOSAL.md](M6_ARCHITECTURE_PROPOSAL.md) and [DOMAIN_DATA_DICTIONARY.md](DOMAIN_DATA_DICTIONARY.md); decisions are recorded in [DECISIONS.md](DECISIONS.md). M6 does not implement a backend, database, Firebase, UI, payments, messaging, evidence storage, or Web3. Implementation remains deferred to separately authorized milestones.
+M6 defines the canonical Order, execution, financial, geography, backend-module, API, transaction, and Home projection boundaries. The approved architecture and data dictionary are [M6_ARCHITECTURE_PROPOSAL.md](M6_ARCHITECTURE_PROPOSAL.md) and [DOMAIN_DATA_DICTIONARY.md](DOMAIN_DATA_DICTIONARY.md); decisions are recorded in [DECISIONS.md](DECISIONS.md). M6 itself remains architecture-only. Later M7 milestones implement selected backend foundations; Orders/Cleaning/Calendar business persistence remains outside M6.
 
 ### Future user experience direction (outside M5)
 
 A later product decision may reorganize the root information architecture as **HOME | MONEY | PROFILE**, place a seven-day Calendar on Home, and present the monthly Calendar as an overlay. This is a future direction only; it is not M5 scope or an M5 acceptance criterion. Finance and related capabilities remain future work.
 
-`POST /v1/auth/bootstrap` and `GET /v1/me` are planned contracts only; neither endpoint exists yet. Firebase Authentication is the planned first provider, not an existing integration.
+### M7 — Production Backend Foundation
 
-### M7 — Production Backend Foundation (PROPOSAL)
+M7 selected NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions, and application-level authorization boundaries. M7-B.1 Production Backend Foundation, M7-B.2 Identity + Authentication Foundation, and M7-B.3 Authorization Foundation are merged to `main`. The current implementation state is summarized in [ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md); decisions remain in [ADR-018](ADR-018-production-backend-foundation.md), [ADR-019](ADR-019-identity-authentication-foundation.md), and [ADR-020](ADR-020-authorization-foundation.md).
 
-The approved canonical architecture is [M7_ARCHITECTURE_PROPOSAL.md](M7_ARCHITECTURE_PROPOSAL.md), with its decision index in [ADR-018](ADR-018-production-backend-foundation.md). It selects NestJS at the HTTP/composition/infrastructure boundary, PostgreSQL 18.x, Drizzle + `pg`, provider-independent Qleanfeel sessions initially bootstrapped from Firebase identity proof, server-side relationship authorization, and atomic canonical Order/Cleaning/Calendar commands. It preserves the approved M6 model and current M1–M5 implementation contracts. M7-A is the documentation checkpoint; implementation belongs to the separate M7-B phase. M7 is not a Finance milestone; Money/Accounting and tax policy remain deferred future work.
+### M7-B.4 — Canonical Order + Initial Cleaning + Optional Calendar Scheduling
+
+Architecture is approved in [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md). It defines `POST /v1/me/orders`, one initial Cleaning per successful `CreateManualOrder`, optional Calendar scheduling, and one atomic UnitOfWork. Production business code has not started. This slice has no generic API idempotency; that work is explicitly deferred to a future API reliability slice without an assigned milestone number. M7 is not a Finance milestone; Money/Accounting and tax policy remain deferred future work.
+
+| M7-B slice | Scope | Status |
+| --- | --- | --- |
+| M7-B.1 — Production Backend Foundation | NestJS composition, PostgreSQL/Drizzle persistence boundary, and UnitOfWork | **COMPLETE — MERGED** |
+| M7-B.2 — Identity + Authentication Foundation | Firebase identity proof, Qleanfeel sessions/credentials, and protected identity endpoints | **COMPLETE — MERGED** |
+| M7-B.3 — Authorization Foundation | Framework-independent Application authorization boundary | **COMPLETE — MERGED** |
+| M7-B.4 — Canonical Order + Initial Cleaning + Optional Calendar Scheduling | Architecture in ADR-021; atomic first business command | **ARCHITECTURE APPROVED — IMPLEMENTATION NOT STARTED** |
 
 ## Remote-first development
 
