@@ -180,7 +180,7 @@ Profile endpoint errors use a small JSON envelope with a stable code and a safe 
 
 The minimum categories are `401 Unauthorized` / `UNAUTHORIZED` for absent or invalid authentication, `403 Forbidden` / `FORBIDDEN` when an authenticated request is not permitted, `404 Not Found` / `PROFILE_NOT_FOUND` when the current user's Profile is absent, `400 Bad Request` / `VALIDATION_ERROR` for an invalid display name, and `500 Internal Server Error` / `INTERNAL_ERROR` for an unexpected server failure. Error messages must not expose stack traces or internal details. These endpoint-specific statuses do not define a universal `403` versus `404` policy for other resources.
 
-### Calendar — MOBILE UI, DOMAIN, API BOUNDARIES, AND DEVELOPMENT CHAIN IMPLEMENTED; PRODUCTION BACKEND ABSENT
+### Calendar — MOBILE DEVELOPMENT CHAIN IMPLEMENTED; FULL PRODUCTION CALENDAR API ABSENT
 
 The Calendar domain and UI are implemented behind provider-independent application and repository boundaries. The current chain is:
 
@@ -194,7 +194,7 @@ CalendarScreen
   → development in-memory HTTP handler
 ```
 
-The production backend and persistent Calendar storage do not exist yet. The in-memory handler is a development implementation of the HTTP boundary.
+The full production Calendar API and general Calendar persistence workflows do not exist yet. M7-B.4 adds CalendarEntry persistence only as part of canonical Order creation when a schedule is requested; that implementation is in Draft PR #11 and is not merged into `main`. The in-memory handler remains a development implementation of the mobile HTTP boundary.
 
 `CalendarEntry` contains `id`, `startAt`, `endAt`, `type`, `status`, and `title`. `startAt` and `endAt` are absolute UTC ISO-8601 timestamps and must satisfy `startAt < endAt`. Calendar intervals use half-open semantics `[startAt, endAt)`. Initial types are `external_order`, `blocked`, and `personal`; statuses are `scheduled`, `cancelled`, and `completed`.
 
@@ -210,9 +210,9 @@ PATCH  /v1/me/calendar/entries/{entryId}
 DELETE /v1/me/calendar/entries/{entryId}
 ```
 
-For GET, both range bounds are required, `from < to`, and an entry is returned when `entry.startAt < to && from < entry.endAt`. The endpoints are contracts exercised by the development handler; they do not imply an existing production API or persistence layer.
+For GET, both range bounds are required, `from < to`, and an entry is returned when `entry.startAt < to && from < entry.endAt`. These Calendar CRUD endpoints are contracts exercised by the development handler; they do not imply a production Calendar CRUD API. The scoped M7-B.4 Order-creation path separately persists a scheduled CalendarEntry in Draft PR #11.
 
-### Manual Orders — MOBILE DOMAIN, API BOUNDARIES, DEVELOPMENT COMPOSITION, AND UI IMPLEMENTED; PRODUCTION BACKEND ABSENT
+### Manual Orders — MOBILE DEVELOPMENT FLOW AND CANONICAL PRODUCTION CREATE PATH IN DRAFT PR #11
 
 ManualOrder is a separate domain entity from CalendarEntry. It owns customer and service snapshots, address, optional phone/quoted price/notes, its server-assigned `id` and `createdAt`, and a `calendarEntryId` reference. It does not contain `startAt`, `endAt`, `userId`, or an Order status. Client create requests do not contain server-owned IDs, timestamps, user identity, or status.
 
@@ -238,9 +238,9 @@ POST /v1/me/manual-orders
 GET  /v1/me/manual-orders/{orderId}
 ```
 
-`CreateScheduledManualOrder` coordinates Calendar creation and ManualOrder creation through the existing application services. If ManualOrder creation fails after Calendar creation, it attempts to delete the newly created CalendarEntry and propagates the original failure. If compensation also fails, it returns a safe compensation error. This is development/application-level compensation, not a transaction; production transactional orchestration and persistent storage are not implemented.
+`CreateScheduledManualOrder` coordinates Calendar creation and ManualOrder creation through the existing application services. If M4 ManualOrder creation fails after Calendar creation, it attempts to delete the newly created CalendarEntry and propagates the original failure. If compensation also fails, it returns a safe compensation error. This M4 flow remains development-only and is not a transaction. The separate canonical `POST /v1/me/orders` production path, with persistence and atomic Order/Cleaning/optional scheduling, is implemented in Draft PR #11 and is not yet merged into `main`.
 
-The development HTTP router explicitly sends `/v1/me/manual-orders` requests to the in-memory ManualOrder handler. ManualOrder and Calendar state are process-local and are lost when the development composition is recreated. No real backend, database, or production persistence is present.
+The development HTTP router explicitly sends `/v1/me/manual-orders` requests to the in-memory ManualOrder handler. ManualOrder and Calendar state created through that M4 development flow are process-local and are lost when the development composition is recreated. The canonical production Order persistence is present on the Draft PR #11 feature branch, but is not yet part of `main` and is not connected to the mobile flow.
 
 ### M5 — Cleaner Application Shell & Navigation — IMPLEMENTED
 
