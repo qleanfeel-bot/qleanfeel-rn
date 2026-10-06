@@ -1,5 +1,7 @@
 # Architecture
 
+For the current and planned module/data-flow views, see the [Living Architecture Map](ARCHITECTURE_MAP.md). This document retains the narrative and milestone-era details; the map uses `main` implementation state while ADRs and the roadmap remain their respective sources of truth.
+
 ## Current state — IMPLEMENTED
 
 - The mobile application uses React Native. `App.tsx` at the repository root renders `AuthGate`, which observes application auth state and selects the login, loading, or authenticated shell.
@@ -30,7 +32,7 @@
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
 - The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
-- The current Jest suite has 30 suites and 276 tests. Tests exercise domain/application and presentation behavior with fakes and development in-memory handlers; they are not real provider/backend integration tests.
+- The current mobile Jest suite has 30 suites and 276 tests. These tests exercise mobile domain/application and presentation behavior with fakes and development in-memory handlers; they are not real mobile-to-backend integration tests. Backend tests are tracked separately in [TEST_MATRIX.md](TEST_MATRIX.md).
 - The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
@@ -70,7 +72,7 @@ src/
     └── security/
 ```
 
-The eventual backend direction is a modular monolith initially. No backend implementation or service topology is established yet.
+The backend is implemented as a NestJS modular-monolith foundation under `backend/src/`, with identity/authentication, health, PostgreSQL persistence, and the Application authorization boundary. M7-B.4 adds its first scoped production Order capability: `CreateManualOrder` at `POST /v1/me/orders`, with canonical Order, OrderTerms, initial Cleaning, and optional CalendarEntry persistence. This implementation is present on the feature branch in Draft PR #11 and is not yet merged into `main`. The broader Orders domain/API, full Calendar CRUD, and future business modules and resources remain planned. The mobile source tree still uses the existing layer folders shown above; the proposed `src/app` / `src/features` structure is not current code.
 
 ## Architectural principles
 
@@ -85,21 +87,11 @@ The eventual backend direction is a modular monolith initially. No backend imple
 
 These are governance principles for future work, not claims that corresponding systems already exist.
 
-## Authentication — MOBILE FOUNDATION IMPLEMENTED; PROVIDER/BACKEND INTEGRATION PLANNED
+## Authentication — BACKEND FOUNDATION IMPLEMENTED; MOBILE PRODUCTION INTEGRATION PLANNED
 
-The provider-independent mobile authentication foundation is implemented. Real authentication against an external provider and backend is not. Firebase Authentication is the planned first provider, not currently integrated. Its UID identifies an external provider subject; it is not the Qleanfeel User ID. `User`, `AuthIdentity`, and `AuthSession` are provider-independent Qleanfeel domain concepts; AuthIdentity links an internal User to an external identity:
+The backend has provider-independent `User`, `AuthIdentity`, `AuthSession`, and refresh-token domain concepts. Firebase Admin verifies identity proof at bootstrap and returns a normalized provider subject; the Firebase UID is not the Qleanfeel User ID. Bootstrap resolves or provisions the Qleanfeel identity and creates a session. Protected requests use Qleanfeel-issued access credentials and current server-side session/account state. See [ADR-019](ADR-019-identity-authentication-foundation.md).
 
-```text
-Firebase identity (providerSubject = Firebase UID)
-                         ↓
-                    AuthIdentity
-                         ↓
-                  Qleanfeel User
-```
-
-AuthIdentity fields are `id`, `userId`, `provider`, `providerSubject`, `createdAt`, and `lastAuthenticatedAt`. For a future Firebase adapter, `provider` is `firebase`, and `providerSubject` is the Firebase UID. AuthSession is separate from User and AuthIdentity and contains no provider credential. The current AuthApi contract returns the Qleanfeel User; the controller does not synthesize an AuthSession. No custom Qleanfeel token/session system or credential persistence is implemented.
-
-### Mobile state and provider boundary — IMPLEMENTED CONTRACTS; PROVIDER ADAPTER PLANNED
+### Mobile state and provider boundary — CONTRACTS IMPLEMENTED; APP STILL USES DEVELOPMENT COMPOSITION
 
 The mobile Domain/Application boundary is provider-agnostic. Provider-specific SDK types and exceptions must stay inside a future adapter. Current contracts make the boundary explicit:
 
@@ -108,40 +100,20 @@ AuthStateController
        ↓
 AuthProviderAdapter / AuthApi ports
        ↓
-future provider adapter / backend API implementation
+development in-memory composition (currently wired)
 ```
 
-`AuthStateController` owns application authentication state and coordinates restoration, OTP request/verification, and logout through the ports. Provider failures are represented with provider-independent auth error codes. No Firebase adapter or concrete auth provider/backend implementation exists. Shared `HttpTransport` is implemented for Profile and Calendar APIs but does not connect to a production backend.
+`AuthStateController` owns mobile application authentication state. Its provider/API ports and the development fake remain in place, but the current mobile app does not call the production backend or use a mobile Firebase adapter. The backend Firebase verifier, Qleanfeel access/refresh credentials, session persistence, and authenticated-principal resolution are implemented separately. The mobile API transport remains connected to the development in-memory handler.
 
 `AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or `AuthenticatedAppShell`. The authenticated shell mounts `RootNavigator`; `MainNavigator` provides Home, Calendar, Orders, and Profile root tabs. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and provides logout. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
 
-Firebase is planned as the first provider but is not integrated. Backend authentication/API is planned; `POST /v1/auth/bootstrap` and `GET /v1/me` do not exist. No production credential persistence or production signing is configured.
+### Backend identity and authorization — FOUNDATION IMPLEMENTED; RESOURCE POLICIES INTRODUCED WITH BUSINESS MODULES
 
-### Backend identity and authorization — PLANNED
+The production backend implements `POST /v1/auth/bootstrap`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, and `GET /v1/me`. Firebase proves external identity at bootstrap only. Protected requests use Qleanfeel-issued credentials; the access guard resolves the server-side `AuthenticatedPrincipal` after credential, session, and account checks. Invalid credentials receive `401`; a suspended account receives `403`.
 
-The backend is intended to be authoritative for authorization. Authentication establishes who the caller is; authorization determines what the caller may do; resource ownership determines whether the caller may access a particular resource. The client must never be trusted to assert `userId`, `role`, permissions, or ownership. User roles are business/authorization state, not authentication identity; the model must allow multiple roles, for example `roles: ["CLIENT", "CLEANER"]`. Backend authorization and role behavior are not implemented.
+The M7-B.3 Application boundary represents permit/deny, policy evaluation, and authorization denial without NestJS or persistence dependencies. It provides generic policy contracts; M7-B.4 adds an operation-specific active-account policy for `CreateManualOrder`, present in Draft PR #11 and not yet merged into `main`. Broader Order ownership, assignment, and participation policies, along with policies for future business resources, remain planned. Client-provided identity, creator, ownership, role, capability, assignment, and session claims are not authorization facts. See [ADR-020](ADR-020-authorization-foundation.md) and [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md). The M7-B.4 rule is scoped to this operation and is not a final role or capability model.
 
-The future backend provider boundary is expected to verify an external credential, resolve the external identity, and then resolve that identity to a Qleanfeel User:
-
-```text
-Authentication Provider Layer
-├── FirebaseVerifier
-├── FutureCustomVerifier
-└── FutureWeb3Verifier
-
-external credential → verified external identity → AuthIdentity → Qleanfeel User
-```
-
-The planned initial mobile/backend contract sends `Authorization: Bearer <Firebase ID token>`. The future backend must verify this token server-side. The mobile client must not treat a token as valid merely because it can decode it locally.
-
-Planned endpoints (neither exists yet):
-
-| Endpoint | Planned purpose |
-| --- | --- |
-| `POST /v1/auth/bootstrap` | Verify the external credential; resolve or create AuthIdentity and Qleanfeel User; return the Qleanfeel authenticated identity/context. |
-| `GET /v1/me` | Return the current Qleanfeel User and read current authorization/business identity state. |
-
-HTTP semantics distinguish failure to establish authentication from an authenticated but disallowed action: `401 Unauthorized` for missing, invalid, or expired credentials; `403 Forbidden` when authentication succeeds but the action is not permitted. A protected resource may return `404` when hiding its existence is desirable. The appropriate `403`/`404` behavior is resource-specific; there is no single rule for all resources.
+HTTP semantics remain distinct: `401 Unauthorized` means authentication is absent or invalid; `403 Forbidden` means the authenticated caller is denied, including the existing suspended-account behavior. A future resource API may deliberately return `404` to hide resource existence. Mapping belongs to HTTP adapters.
 
 ### Profile — MOBILE UI, HTTP/API BOUNDARIES, AND DEVELOPMENT CHAIN IMPLEMENTED; BACKEND CONTRACT ONLY
 
@@ -157,7 +129,7 @@ ProfileScreen → ProfileService → ProfileRepository
 AccessTokenProvider → HttpTransport
 ```
 
-The current development composition connects `HttpTransport` to an in-memory HTTP handler. A production backend is not implemented.
+The current development composition connects `HttpTransport` to an in-memory HTTP handler. A production Profile backend and persistence are not implemented.
 
 `AccessTokenProvider` only supplies an opaque API access token. It does not manage login/logout or retain User/AuthState. It is distinct from `ProviderCredential`, which the auth flow passes to `AuthApi`. No Firebase adapter, token refresh, production credential persistence, or production backend URL is implemented.
 
@@ -208,7 +180,7 @@ Profile endpoint errors use a small JSON envelope with a stable code and a safe 
 
 The minimum categories are `401 Unauthorized` / `UNAUTHORIZED` for absent or invalid authentication, `403 Forbidden` / `FORBIDDEN` when an authenticated request is not permitted, `404 Not Found` / `PROFILE_NOT_FOUND` when the current user's Profile is absent, `400 Bad Request` / `VALIDATION_ERROR` for an invalid display name, and `500 Internal Server Error` / `INTERNAL_ERROR` for an unexpected server failure. Error messages must not expose stack traces or internal details. These endpoint-specific statuses do not define a universal `403` versus `404` policy for other resources.
 
-### Calendar — MOBILE UI, DOMAIN, API BOUNDARIES, AND DEVELOPMENT CHAIN IMPLEMENTED; PRODUCTION BACKEND ABSENT
+### Calendar — MOBILE DEVELOPMENT CHAIN IMPLEMENTED; FULL PRODUCTION CALENDAR API ABSENT
 
 The Calendar domain and UI are implemented behind provider-independent application and repository boundaries. The current chain is:
 
@@ -222,7 +194,7 @@ CalendarScreen
   → development in-memory HTTP handler
 ```
 
-The production backend and persistent Calendar storage do not exist yet. The in-memory handler is a development implementation of the HTTP boundary.
+The full production Calendar API and general Calendar persistence workflows do not exist yet. M7-B.4 adds CalendarEntry persistence only as part of canonical Order creation when a schedule is requested; that implementation is in Draft PR #11 and is not merged into `main`. The in-memory handler remains a development implementation of the mobile HTTP boundary.
 
 `CalendarEntry` contains `id`, `startAt`, `endAt`, `type`, `status`, and `title`. `startAt` and `endAt` are absolute UTC ISO-8601 timestamps and must satisfy `startAt < endAt`. Calendar intervals use half-open semantics `[startAt, endAt)`. Initial types are `external_order`, `blocked`, and `personal`; statuses are `scheduled`, `cancelled`, and `completed`.
 
@@ -238,9 +210,9 @@ PATCH  /v1/me/calendar/entries/{entryId}
 DELETE /v1/me/calendar/entries/{entryId}
 ```
 
-For GET, both range bounds are required, `from < to`, and an entry is returned when `entry.startAt < to && from < entry.endAt`. The endpoints are contracts exercised by the development handler; they do not imply an existing production API or persistence layer.
+For GET, both range bounds are required, `from < to`, and an entry is returned when `entry.startAt < to && from < entry.endAt`. These Calendar CRUD endpoints are contracts exercised by the development handler; they do not imply a production Calendar CRUD API. The scoped M7-B.4 Order-creation path separately persists a scheduled CalendarEntry in Draft PR #11.
 
-### Manual Orders — MOBILE DOMAIN, API BOUNDARIES, DEVELOPMENT COMPOSITION, AND UI IMPLEMENTED; PRODUCTION BACKEND ABSENT
+### Manual Orders — MOBILE DEVELOPMENT FLOW AND CANONICAL PRODUCTION CREATE PATH IN DRAFT PR #11
 
 ManualOrder is a separate domain entity from CalendarEntry. It owns customer and service snapshots, address, optional phone/quoted price/notes, its server-assigned `id` and `createdAt`, and a `calendarEntryId` reference. It does not contain `startAt`, `endAt`, `userId`, or an Order status. Client create requests do not contain server-owned IDs, timestamps, user identity, or status.
 
@@ -266,9 +238,9 @@ POST /v1/me/manual-orders
 GET  /v1/me/manual-orders/{orderId}
 ```
 
-`CreateScheduledManualOrder` coordinates Calendar creation and ManualOrder creation through the existing application services. If ManualOrder creation fails after Calendar creation, it attempts to delete the newly created CalendarEntry and propagates the original failure. If compensation also fails, it returns a safe compensation error. This is development/application-level compensation, not a transaction; production transactional orchestration and persistent storage are not implemented.
+`CreateScheduledManualOrder` coordinates Calendar creation and ManualOrder creation through the existing application services. If M4 ManualOrder creation fails after Calendar creation, it attempts to delete the newly created CalendarEntry and propagates the original failure. If compensation also fails, it returns a safe compensation error. This M4 flow remains development-only and is not a transaction. The separate canonical `POST /v1/me/orders` production path, with persistence and atomic Order/Cleaning/optional scheduling, is implemented in Draft PR #11 and is not yet merged into `main`.
 
-The development HTTP router explicitly sends `/v1/me/manual-orders` requests to the in-memory ManualOrder handler. ManualOrder and Calendar state are process-local and are lost when the development composition is recreated. No real backend, database, or production persistence is present.
+The development HTTP router explicitly sends `/v1/me/manual-orders` requests to the in-memory ManualOrder handler. ManualOrder and Calendar state created through that M4 development flow are process-local and are lost when the development composition is recreated. The canonical production Order persistence is present on the Draft PR #11 feature branch, but is not yet part of `main` and is not connected to the mobile flow.
 
 ### M5 — Cleaner Application Shell & Navigation — IMPLEMENTED
 

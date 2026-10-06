@@ -20,7 +20,7 @@ npm run start:dev
 
 The backend listens on `PORT` (default `3000`). `GET /health/live` reports process liveness without querying PostgreSQL. `GET /health/ready` performs `SELECT 1` and returns `503` if PostgreSQL is unavailable. Both health endpoints are unauthenticated and excluded from the `/v1` prefix.
 
-The initial identity endpoints are `POST /v1/auth/bootstrap`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, and authenticated `GET /v1/me`. Bootstrap accepts a Firebase ID token, verifies it through Firebase Admin using Application Default Credentials, and creates/resolves a Qleanfeel User and per-device session. Set `FIREBASE_PROJECT_ID` and `ACCESS_TOKEN_SIGNING_SECRET` for authentication; the signing secret must be at least 32 bytes. Never put real credentials in `.env.example` or commit local `.env` files.
+The identity endpoints are `POST /v1/auth/bootstrap`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, and authenticated `GET /v1/me`. M7-B.4 adds authenticated `POST /v1/me/orders` to create a canonical manual Order, its initial terms and Cleaning, and optionally a Calendar-owned schedule in one transaction. Bootstrap accepts a Firebase ID token, verifies it through Firebase Admin using Application Default Credentials, and creates/resolves a Qleanfeel User and per-device session. Set `FIREBASE_PROJECT_ID` and `ACCESS_TOKEN_SIGNING_SECRET` for authentication; the signing secret must be at least 32 bytes. Never put real credentials in `.env.example` or commit local `.env` files.
 
 ## Checks
 
@@ -39,7 +39,7 @@ npm run db:migrate
 npm run test:postgres
 ```
 
-These commands require `MIGRATION_DATABASE_URL` and `TEST_DATABASE_URL` to point to the dedicated PostgreSQL 18 test database. The PostgreSQL integration suite checks connectivity, schema constraints, identity provisioning races and rollback, token rotation, and session revocation.
+These commands require `MIGRATION_DATABASE_URL` and `TEST_DATABASE_URL` to point to the dedicated PostgreSQL 18 test database. The PostgreSQL integration suite checks connectivity, schema constraints, identity provisioning races, token rotation, session revocation, and M7-B.4 scheduled/unscheduled Order creation and transaction rollback.
 
 ## Migrations and credentials
 
@@ -53,7 +53,7 @@ npm run db:migrate
 
 `db:migrate` is an explicit operator/deployment action. The application never runs migrations at startup, and `drizzle-kit push` is not a deployment workflow. Drizzle Kit requires `MIGRATION_DATABASE_URL`; the application runtime reads only `DATABASE_URL`. Local Compose examples may use one disposable role for convenience. Staging/production must use distinct least-privilege runtime and DDL principals, with DDL rights unavailable to the application runtime.
 
-The first application migration creates the dedicated `qleanfeel` schema and only the four approved identity/session tables: `users`, `auth_identities`, `auth_sessions`, and `session_refresh_tokens`. No Profile, Orders, Cleaning, Calendar, Dashboard, Money, capability, or idempotency tables are included. Drizzle's migration journal remains in PostgreSQL's existing `public` schema as infrastructure metadata.
+The initial migration creates the dedicated `qleanfeel` schema and four identity/session tables: `users`, `auth_identities`, `auth_sessions`, and `session_refresh_tokens`. M7-B.4 adds `orders`, `order_terms`, `cleanings`, and Calendar-owned `calendar_entries`; no Profile, Dashboard, Money, capability, or idempotency tables are included. Drizzle's migration journal remains in PostgreSQL's existing `public` schema as infrastructure metadata.
 
 The application-facing `UnitOfWork` port accepts an opaque transaction context. `PostgresUnitOfWork` creates one Drizzle transaction, registers its context in an infrastructure-only registry, and invalidates it after completion. A nested UnitOfWork is rejected rather than silently opening a second transaction. Future persistence adapters must resolve the transaction they receive from this registry; they must not fall back to the global pool inside a coordinated command.
 

@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm';
 import {
   check,
+  bigint,
   index,
+  integer,
   pgSchema,
   text,
   timestamp,
@@ -100,5 +102,142 @@ export const sessionRefreshTokens = applicationSchema.table(
       table.consumedAt,
       table.revokedAt,
     ),
+  ],
+);
+
+export const orders = applicationSchema.table(
+  'orders',
+  {
+    id: uuid('id').primaryKey(),
+    origin: text('origin').notNull(),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    status: text('status').notNull(),
+    createdAt: instant('created_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+    version: integer('version').notNull(),
+  },
+  table => [
+    check(
+      'orders_origin_check',
+      sql`${table.origin} IN ('manual', 'qleanfeel', 'client')`,
+    ),
+    check(
+      'orders_status_check',
+      sql`${table.status} IN ('draft', 'confirmed', 'cancelled', 'partially_fulfilled', 'fulfilled')`,
+    ),
+    check('orders_version_check', sql`${table.version} > 0`),
+    index('orders_creator_created_idx').on(
+      table.createdByUserId,
+      table.createdAt,
+      table.id,
+    ),
+  ],
+);
+
+export const orderTerms = applicationSchema.table(
+  'order_terms',
+  {
+    id: uuid('id').primaryKey(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull(),
+    customerName: text('customer_name').notNull(),
+    customerPhone: text('customer_phone'),
+    serviceDescription: text('service_description').notNull(),
+    serviceAddress: text('service_address').notNull(),
+    quotedPriceAmountMinor: bigint('quoted_price_amount_minor', {
+      mode: 'number',
+    }),
+    quotedPriceCurrencyCode: text('quoted_price_currency_code'),
+    notes: text('notes'),
+    createdAt: instant('created_at').notNull(),
+  },
+  table => [
+    uniqueIndex('order_terms_order_revision_unique').on(
+      table.orderId,
+      table.revision,
+    ),
+    check('order_terms_revision_check', sql`${table.revision} > 0`),
+    check(
+      'order_terms_quote_pair_check',
+      sql`(${table.quotedPriceAmountMinor} IS NULL) = (${table.quotedPriceCurrencyCode} IS NULL)`,
+    ),
+    check(
+      'order_terms_quote_amount_check',
+      sql`${table.quotedPriceAmountMinor} IS NULL OR (${table.quotedPriceAmountMinor} >= 0 AND ${table.quotedPriceAmountMinor} <= 9007199254740991)`,
+    ),
+    check(
+      'order_terms_quote_currency_check',
+      sql`${table.quotedPriceCurrencyCode} IS NULL OR ${table.quotedPriceCurrencyCode} ~ '^[A-Z]{3}$'`,
+    ),
+  ],
+);
+
+export const calendarEntries = applicationSchema.table(
+  'calendar_entries',
+  {
+    id: uuid('id').primaryKey(),
+    ownerUserId: uuid('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    type: text('type').notNull(),
+    status: text('status').notNull(),
+    title: text('title').notNull(),
+    startAt: instant('start_at').notNull(),
+    endAt: instant('end_at').notNull(),
+    timeZoneId: text('timezone_id'),
+    createdAt: instant('created_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+    version: integer('version').notNull(),
+  },
+  table => [
+    check(
+      'calendar_entries_type_check',
+      sql`${table.type} IN ('external_order', 'blocked', 'personal')`,
+    ),
+    check(
+      'calendar_entries_status_check',
+      sql`${table.status} IN ('scheduled', 'cancelled', 'completed')`,
+    ),
+    check(
+      'calendar_entries_interval_check',
+      sql`${table.startAt} < ${table.endAt}`,
+    ),
+    check('calendar_entries_version_check', sql`${table.version} > 0`),
+    index('calendar_entries_owner_start_idx').on(
+      table.ownerUserId,
+      table.startAt,
+      table.id,
+    ),
+  ],
+);
+
+export const cleanings = applicationSchema.table(
+  'cleanings',
+  {
+    id: uuid('id').primaryKey(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'restrict' }),
+    calendarEntryId: uuid('calendar_entry_id').references(
+      () => calendarEntries.id,
+      { onDelete: 'restrict' },
+    ),
+    status: text('status').notNull(),
+    createdAt: instant('created_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+    version: integer('version').notNull(),
+  },
+  table => [
+    check(
+      'cleanings_status_check',
+      sql`${table.status} IN ('planned', 'in_progress', 'completed', 'partially_completed', 'not_performed', 'cancelled')`,
+    ),
+    check('cleanings_version_check', sql`${table.version} > 0`),
+    uniqueIndex('cleanings_calendar_entry_unique').on(table.calendarEntryId),
+    index('cleanings_order_created_idx').on(table.orderId, table.createdAt),
   ],
 );

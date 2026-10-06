@@ -15,11 +15,14 @@ Reference material: [M6 Architecture Proposal](M6_ARCHITECTURE_PROPOSAL.md) and 
 
 ## M7 — approved Production Backend Foundation
 
-- [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md): approved NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions, authorization, and production transaction boundaries. Backend implementation is deferred to M7-B.
+- [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md): approved NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions, authorization, and transaction boundaries.
+- [ADR-019 — Identity and Authentication Foundation](ADR-019-identity-authentication-foundation.md): M7-B.2 identity, Firebase identity-proof verification, Qleanfeel sessions and credentials, refresh rotation, logout, and `/v1/me`.
 - [ADR-020 — Authorization Foundation](ADR-020-authorization-foundation.md): framework-independent application policy boundary using a trusted principal and server-derived resource facts; no RBAC, capability persistence, or business resource implementation.
+- [ADR-021 — Canonical Order Creation and Optional Scheduling](ADR-021-canonical-order-creation-and-optional-scheduling.md): M7-B.4 active-account authorization, one initial Cleaning, optional CalendarEntry, atomic UnitOfWork, and deferred idempotency.
 - [M7 Architecture Proposal](M7_ARCHITECTURE_PROPOSAL.md): canonical approved module, command, persistence, API, security, operations, and mobile migration architecture.
+- [Living Architecture Map](ARCHITECTURE_MAP.md): visual current/planned structure and data-flow guide; ADRs remain the decision source.
 
-ADR-018 records explicit M7 selections for choices that M6 deferred. It does not rewrite the M6 historical record or change existing M1–M5 code/contracts. In particular, the Firebase bearer-token plan recorded under ADR-008 is historical and is superseded for the protected production API by Qleanfeel-issued session credentials after bootstrap.
+M7-B.1 through M7-B.3 are merged. M7-B.4 implementation is in Draft PR #11 and is not merged; ADR-021 remains its approved decision source. ADR-018 records explicit M7 selections for choices that M6 deferred. It does not rewrite the M6 historical record or change existing M1–M5 mobile contracts. In particular, the Firebase bearer-token plan recorded under ADR-008 is historical and is superseded for the protected production API by Qleanfeel-issued session credentials after bootstrap.
 
 ## ADR-001 — React Native as the mobile application framework
 
@@ -52,24 +55,24 @@ ADR-018 records explicit M7 selections for choices that M6 deferred. It does not
 
 ## ADR-005 — Firebase Authentication as the first authentication provider
 
-- **Status:** Accepted (provider integration planned)
-- **Decision:** Use Firebase Authentication as the first planned external authentication provider. Firebase is not yet integrated.
+- **Status:** Accepted (backend identity-proof verifier implemented; mobile provider adapter remains planned)
+- **Decision:** Use Firebase as the initial external identity-proof provider. The backend verifier is implemented; the mobile app still uses its development authentication composition.
 
 ## ADR-006 — Separate provider identity from the Qleanfeel User
 
-- **Status:** Accepted (domain model implemented; Firebase integration planned)
-- **Decision:** Qleanfeel has its own internal User ID. A Firebase UID is the provider subject, not the Qleanfeel User ID. The provider-independent User and AuthIdentity domain models are implemented; AuthIdentity links an internal User to an external identity using `id`, `userId`, `provider`, `providerSubject`, `createdAt`, and `lastAuthenticatedAt`.
+- **Status:** Accepted (domain model and backend identity resolution implemented; mobile provider integration remains planned)
+- **Decision:** Qleanfeel has its own internal User ID. A Firebase UID is the provider subject, not the Qleanfeel User ID. AuthIdentity links an internal User to an external identity using `id`, `userId`, `provider`, `providerSubject`, `createdAt`, and `lastAuthenticatedAt`.
 
 ## ADR-007 — Keep authentication, authorization, and resource ownership distinct
 
-- **Status:** Accepted (backend authorization implementation planned)
+- **Status:** Accepted (principal and application authorization boundary implemented; resource policies await business modules)
 - **Decision:** Authentication establishes who the caller is; authorization determines permitted actions; resource ownership determines access to a particular resource. The Qleanfeel backend is authoritative. Client-provided `userId`, `role`, permissions, and ownership are not trusted. Roles are business/authorization state and may be multiple per User; they are not authentication identity.
 
 ## ADR-008 — Keep authentication provider-specific details behind boundaries
 
-- **Status:** Accepted (mobile contracts implemented; concrete adapters/backend planned)
-- **Decision:** Keep mobile Domain/Application behavior provider-agnostic, with provider SDK types and errors contained by adapters. The mobile provider and API ports and application state boundary are implemented; concrete provider/backend implementations are not. The planned backend verifies credentials behind provider-specific verifier boundaries before resolving an external identity to a Qleanfeel User. The initial planned contract uses `Authorization: Bearer <Firebase ID token>` and requires server-side verification; local token decoding does not establish validity.
-- **Planned endpoints:** `POST /v1/auth/bootstrap` for credential verification and identity/User resolution, and `GET /v1/me` for the current Qleanfeel User and authorization/business identity state. Neither endpoint currently exists.
+- **Status:** Accepted (mobile contracts and backend verifier/authentication adapters implemented; mobile production integration remains planned)
+- **Decision:** Keep mobile Domain/Application behavior provider-agnostic, with provider SDK types and errors contained by adapters. The backend verifies Firebase proof behind its provider adapter and resolves it to a Qleanfeel User. Firebase proof is used at bootstrap; protected requests use Qleanfeel-issued credentials. Local token decoding does not establish validity.
+- **Implemented backend endpoints:** `POST /v1/auth/bootstrap`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, and `GET /v1/me`. The current mobile app still uses an in-memory development authentication composition and is not connected to these endpoints.
 - **Superseding M7 decision:** The Firebase bearer credential is retained as bootstrap identity proof only. Under approved [ADR-018](ADR-018-production-backend-foundation.md), protected `/v1/*` requests use Qleanfeel-issued access credentials after bootstrap. This note preserves the original M1 plan as history and does not change implementation.
 
 ## ADR-009 — Web3 is a future capability, not part of M1

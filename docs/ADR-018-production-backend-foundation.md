@@ -24,6 +24,10 @@ M6 established the canonical business model and modular-monolith boundaries whil
 
 The complete command, data, module, API, operations, mobile-impact, and implementation boundary is specified in [M7_ARCHITECTURE_PROPOSAL.md](M7_ARCHITECTURE_PROPOSAL.md). That approved proposal is the detailed canonical M7 architecture; this ADR is its decision index.
 
+### Later M7-B.4 clarification
+
+For `CreateManualOrder`, the later operation-specific [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md) explicitly defers durable API idempotency to a future API reliability slice. This narrows decision 7 for that command only; it does not settle retry policy for other commands.
+
 ## Consequences
 
 - Production backend work belongs to the separate M7-B implementation phase and is not part of this documentation checkpoint.

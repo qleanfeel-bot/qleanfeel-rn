@@ -136,7 +136,7 @@ function bootstrap(app: AuthTestContext['app'], subject: string) {
     .send({ firebaseIdToken: `proof:${subject}` });
 }
 
-test('auth migration creates only the four tables in qleanfeel and enforces relational constraints', async () => {
+test('application migrations create the approved tables and enforce relational constraints', async () => {
   await withAuthApplication(async ({ app, pool, subject }) => {
     const value = subject('constraints');
     const created = await bootstrap(app, value);
@@ -150,6 +150,10 @@ test('auth migration creates only the four tables in qleanfeel and enforces rela
     assert.deepEqual(tables.rows.map(row => row.table_name).sort(), [
       'auth_identities',
       'auth_sessions',
+      'calendar_entries',
+      'cleanings',
+      'order_terms',
+      'orders',
       'session_refresh_tokens',
       'users',
     ]);

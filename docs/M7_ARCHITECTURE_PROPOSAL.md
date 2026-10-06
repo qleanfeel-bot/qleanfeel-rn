@@ -1,11 +1,11 @@
 # M7 — Production Backend Foundation
 
-- **Status:** Approved — M7-A documentation checkpoint; implementation deferred to M7-B
+- **Status:** Approved architecture; M7-B.1–B.3 implemented and merged; M7-B.4 implementation present in Draft PR #11, not merged
 - **Baseline:** M6 architecture in [M6_ARCHITECTURE_PROPOSAL.md](M6_ARCHITECTURE_PROPOSAL.md), [ADR-014](ADR-014-canonical-order-and-work-execution.md), [ADR-016](ADR-016-business-modules-api-transactions-and-home.md), and [ADR-017](ADR-017-messaging-evidence-and-settlement-boundaries.md)
-- **Code baseline:** The last confirmed `origin/main` recorded by M6 is `59c2636989f5abea5b936c936c7308fb5db3b052` (M5). M6/M7 documentation in this checkout does not imply that M6 is merged into `main`.
+- **Historical code baseline:** M7-A began from `59c2636989f5abea5b936c936c7308fb5db3b052` (M5). This records the proposal's original baseline, not the current repository state.
 - **Related decision record:** [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md)
 
-This proposal records the human-approved M7 architecture. M7-A is the documentation checkpoint; backend implementation is excluded from this handoff and belongs to the separately scoped M7-B phase.
+This proposal records the approved M7 architecture. M7-B.1–B.3 are implemented on `main`. The M7-B.4 business architecture is specified by [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md); its implementation is present on the feature branch in Draft PR #11 and is not yet merged into `main`. Current milestone status is tracked in [ROADMAP.md](ROADMAP.md).
 
 ## 1. Scope
 
@@ -50,7 +50,7 @@ The backend is a modular monolith. It starts as one deployable application and o
 
 | Module | Authoritative facts and responsibilities |
 | --- | --- |
-| Identity / Authorization | Qleanfeel User, provider AuthIdentity links, sessions, account status, capabilities, authentication resolution, and resource policies. |
+| Identity / Authorization | Qleanfeel User, provider AuthIdentity links, sessions, account status, authentication resolution, and resource policies. A general capability model remains a future decision; no capability persistence or administration is part of M7-B.1–B.4. |
 | Profile | User-facing profile fields. It does not own authentication identity, capabilities, or service/legal jurisdiction. |
 | Calendar | CalendarEntry intervals, types, Calendar lifecycle, availability blocks, and schedule updates. It is authoritative for schedule facts. |
 | Orders | Order origin, creator, customer and service/price term snapshots, Order lifecycle, and Order lifecycle history. |
@@ -68,6 +68,7 @@ An optional Order-level assigned cleaner describes assignment of the overall Ord
 ## 4. Canonical domain model
 
 ```text
+Order 1 ── 1..N OrderTerms revisions
 Order 1 ── 0..N Cleaning
 Cleaning 0..1 ── current CalendarEntry
 ```
@@ -86,7 +87,7 @@ Commands express validated intent and enforce lifecycle rules. Lifecycle state i
 | --- | --- | --- | --- |
 | `ResolveAuthenticatedIdentity` | Identity; verified provider subject only. Provider credential must be verified by its adapter. | Atomic AuthIdentity/User resolution and session creation; idempotent bootstrap semantics; unique provider+subject mapping. | Resolve or provision User and establish a Qleanfeel session; never accepts caller-supplied user identity. |
 | `UpdateProfile` | Profile; authenticated User updating own Profile, subject to active-account policy. | One write; retry-safe desired-state update; Profile version required for stale-write protection. | Profile fields change; audit only if a field/security policy requires it. |
-| `CreateManualOrder` | Orders orchestration; authenticated cleaner-capable principal. Customer/creator/origin/assignment are server-derived or validated against policy. | One shared transaction across Order, initial Cleaning, optional CalendarEntry, lifecycle records and idempotency result; idempotent; versions initialized. | `Order confirmed` + one `Cleaning planned` + optional current schedule; corresponding creation events. |
+| `CreateManualOrder` | Orders orchestration; any active authenticated Qleanfeel account creating for itself under ADR-021. `createdByUserId` and any initial Cleaning assignment are derived from `AuthenticatedPrincipal.userId`. | One UnitOfWork/transaction across Order, initial OrderTerms, exactly one initial Cleaning, optional CalendarEntry, and the Cleaning-to-CalendarEntry relation. No generic idempotency in B4. | `Order confirmed` + one `Cleaning planned` + optional current schedule. |
 | `ScheduleCleaning` | Cleaning command port plus Calendar schedule operation; assigned/authorized cleaner or other actor granted by policy. | Shared transaction; idempotent command; expected Cleaning and Calendar versions. | Creates a CalendarEntry and links it as current schedule on Cleaning; records schedule fact/history. |
 | `RescheduleCleaning` | Same relationship policy as scheduling; actor must be authorized for both work and schedule. | Shared transaction; idempotent; expected versions for Cleaning and CalendarEntry. | Updates the current CalendarEntry interval and version; retains entry identity; records reschedule lifecycle/audit fact. |
 | `CancelCleaning` | Cleaning; authorized creator/assigned cleaner or future participant policy, subject to current state. | Shared transaction with Calendar cancellation; idempotent; expected Cleaning and Calendar versions. | Cleaning transitions to cancelled/not-performed according to approved reason/state mapping; current CalendarEntry is retained and may become cancelled; record actor/reason/time. |
@@ -149,10 +150,9 @@ calendar_entries(id PK, owner_user_id FK→users, type, status, title,
 order_lifecycle_events(id PK, order_id FK→orders, version, event_type, actor, occurred_at, payload)
 cleaning_lifecycle_events(id PK, cleaning_id FK→cleanings, version, event_type, actor, occurred_at, payload)
 calendar_lifecycle_events(id PK, calendar_entry_id FK→calendar_entries, version, event_type, actor, occurred_at, payload)
-idempotency_records(id PK, principal_scope, operation_scope, key, request_fingerprint,
-                    response_status, response_body/reference, created_at, expires_at,
-                    UNIQUE(principal_scope, operation_scope, key))
 ```
+
+The earlier conceptual `user_capabilities` row in this proposal is not current schema and is not part of M7-B.1–B.4. M7-B.4 also removes the previously proposed `idempotency_records` table from its persistence scope; see the idempotency decision in §11 and [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md).
 
 `cleanings.calendar_entry_id` is a nullable unique reference to a Calendar-owned entry. The FK direction and `calendar_entries.owner_user_id` preserve Calendar ownership; deletion of a referenced entry is restricted until the Cleaning is explicitly rescheduled/cancelled and the reference is cleared or retained under policy. CalendarEntry may exist without Cleaning, and one Cleaning can point to no more than one current entry. Do not introduce an overlap exclusion constraint until product defines overlap semantics.
 
@@ -223,6 +223,8 @@ authenticated principal
 
 Authentication proves the caller's identity. Account capability expresses an enabled product capability. Resource ownership identifies who controls a resource. Assignment links a participant to work. Participation grants an explicit relationship-based permission. None is interchangeable with a global role label.
 
+For `CreateManualOrder`, [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md) scopes authorization to any active authenticated Qleanfeel account creating for itself. The policy needs no existing resource relationship: `createdByUserId` and any initial Cleaning assignment come from `AuthenticatedPrincipal.userId`. This does not establish eligibility for future account types and does not add role or capability infrastructure.
+
 | Resource | Initial policy |
 | --- | --- |
 | Profile | An active authenticated User may read/update their own Profile. Server resolves its owner from principal; request-supplied user IDs are ignored/rejected. |
@@ -248,7 +250,9 @@ Canonical API families:
 /v1/me/dashboard
 ```
 
-`/v1/me/manual-orders` is temporary compatibility only. It must map to the same canonical Order/Cleaning/Calendar command and store; it cannot become a second production aggregate. The old M4 client sends separate requests for Calendar then ManualOrder and uses compensation. That flow is not production-atomic and must migrate to the canonical `CreateManualOrder` endpoint/command before production use. Existing M1–M5 contracts remain unchanged until a separately approved client migration.
+`/v1/me/manual-orders` is temporary compatibility only. It must map to the same canonical Order/Cleaning/Calendar command and store; it cannot become a second production aggregate. The old M4 client sends separate requests for Calendar then ManualOrder and uses compensation. That flow is not production-atomic and must migrate to the canonical `CreateManualOrder` endpoint/command before production use. Existing M1–M5 contracts remain unchanged until a separately approved client migration. M7-B.4 exposes only the production create route `POST /v1/me/orders`; it does not implement the full Orders API or Calendar CRUD/read/list endpoints.
+
+The B4 request may carry optional `schedule.startAt` and `schedule.endAt` as client-requested appointment instants. The server authors generated IDs and metadata timestamps (`createdAt`, `updatedAt`, and event-recording times), origin, lifecycle state, version, creator, and assignment. Do not treat the scheduling interval as authority for whether work was performed.
 
 Lists use bounded cursor pagination with stable ordering and explicit filters. Keep safe stable error envelopes and distinguish malformed input, unauthenticated (`401`), authenticated but denied (`403` or policy-selected `404`), missing resource, and state/version/idempotency conflict (`409`). Business commands expose intent-specific routes or operations; generic CRUD is limited to resources/fields where it cannot bypass lifecycle policy. Dashboard is read-only.
 
@@ -256,9 +260,9 @@ Browser session transport remains undecided: native bearer transport is the init
 
 ## 11. Transactions, idempotency, and concurrency
 
-Business invariants are atomic at the backend, not repaired by client compensation. `CreateManualOrder` commits Order, initial Cleaning, optional CalendarEntry, their lifecycle records, and its idempotency result together. Schedule, reschedule, cancellation, and execution transitions use one shared UnitOfWork whenever they change facts owned by more than one module. A failure rolls back all affected facts.
+Business invariants are atomic at the backend, not repaired by client compensation. Under ADR-021, `CreateManualOrder` commits Order, initial OrderTerms, exactly one initial Cleaning, optional CalendarEntry, and the Cleaning-to-CalendarEntry relation together in one UnitOfWork/database transaction. Any failure rolls all of them back. Calendar does not open an independent transaction; nested UnitOfWork and best-effort compensation are not used.
 
-Mutating resource-creation and retry-sensitive business commands require durable, principal-scoped idempotency. Store operation scope, caller key, canonical request fingerprint, outcome/result reference, and retention metadata. Same key plus same fingerprint replays the original outcome; same key plus different fingerprint conflicts. The record commits with the business write. Exact retention duration and refresh-token reuse handling remain explicit decisions. Do not add an outbox table as a mandatory first implementation dependency; revisit it when reliable post-commit notifications or external effects are in scope.
+The earlier general durable-idempotency requirement is explicitly deferred for `CreateManualOrder`. M7-B.4 adds no idempotency table, middleware, service, or reusable framework. A retry after a lost response can create a duplicate Order; track idempotency for a future API reliability slice, with no milestone number assigned. Other command retry policies remain subject to their own approved scope. Do not add an outbox table as a mandatory first implementation dependency; revisit it when reliable post-commit notifications or external effects are in scope.
 
 Mutable Profile, Order, Cleaning, and CalendarEntry use integer `version` fields. A command provides the expected version (or an equivalent API `If-Match` representation); updates compare and increment atomically. A stale version returns `409`. `updatedAt` is descriptive metadata, not a concurrency token. Cross-resource commands check all changed resource versions in the same transaction.
 
@@ -310,4 +314,4 @@ The following are intentionally not fixed by M7 architecture:
 
 ## 15. Implementation boundary
 
-**M7 architecture has been human-approved.** This M7-A handoff contains documentation only. Backend code, dependencies, migrations/schemas, deployment configuration, and authentication implementation belong to the separate M7-B implementation phase and are not included in this commit.
+**M7 architecture has been approved.** M7-B.1–B.3 code and persistence are implemented on `main`. M7-B.4 production business code, migrations, and `POST /v1/me/orders` are implemented on the feature branch in Draft PR #11; they are not yet part of `main`.
