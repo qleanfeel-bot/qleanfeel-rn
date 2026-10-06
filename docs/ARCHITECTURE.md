@@ -72,7 +72,7 @@ src/
     └── security/
 ```
 
-The backend is now implemented as a NestJS modular-monolith foundation under `backend/src/`, with identity/authentication, health, PostgreSQL persistence, and the Application authorization boundary. Production business modules for Profile, Orders, Cleaning, and Calendar remain planned. The mobile source tree still uses the existing layer folders shown above; the proposed `src/app` / `src/features` structure is not current code.
+The backend is implemented as a NestJS modular-monolith foundation under `backend/src/`, with identity/authentication, health, PostgreSQL persistence, and the Application authorization boundary. M7-B.4 adds its first scoped production Order capability: `CreateManualOrder` at `POST /v1/me/orders`, with canonical Order, OrderTerms, initial Cleaning, and optional CalendarEntry persistence. This implementation is present on the feature branch in Draft PR #11 and is not yet merged into `main`. The broader Orders domain/API, full Calendar CRUD, and future business modules and resources remain planned. The mobile source tree still uses the existing layer folders shown above; the proposed `src/app` / `src/features` structure is not current code.
 
 ## Architectural principles
 
@@ -111,7 +111,7 @@ development in-memory composition (currently wired)
 
 The production backend implements `POST /v1/auth/bootstrap`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, and `GET /v1/me`. Firebase proves external identity at bootstrap only. Protected requests use Qleanfeel-issued credentials; the access guard resolves the server-side `AuthenticatedPrincipal` after credential, session, and account checks. Invalid credentials receive `401`; a suspended account receives `403`.
 
-The M7-B.3 Application boundary represents permit/deny, policy evaluation, and authorization denial without NestJS or persistence dependencies. It does not implement business ownership, assignment, or participation policies because the production business modules are not yet present. Client-provided identity, creator, ownership, role, capability, assignment, and session claims are not authorization facts. See [ADR-020](ADR-020-authorization-foundation.md). M7-B.4's scoped active-account rule is documented in [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md); it is not a final role or capability model.
+The M7-B.3 Application boundary represents permit/deny, policy evaluation, and authorization denial without NestJS or persistence dependencies. It provides generic policy contracts; M7-B.4 adds an operation-specific active-account policy for `CreateManualOrder`, present in Draft PR #11 and not yet merged into `main`. Broader Order ownership, assignment, and participation policies, along with policies for future business resources, remain planned. Client-provided identity, creator, ownership, role, capability, assignment, and session claims are not authorization facts. See [ADR-020](ADR-020-authorization-foundation.md) and [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md). The M7-B.4 rule is scoped to this operation and is not a final role or capability model.
 
 HTTP semantics remain distinct: `401 Unauthorized` means authentication is absent or invalid; `403 Forbidden` means the authenticated caller is denied, including the existing suspended-account behavior. A future resource API may deliberately return `404` to hide resource existence. Mapping belongs to HTTP adapters.
 
