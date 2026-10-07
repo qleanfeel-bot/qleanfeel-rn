@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Test } from '@nestjs/testing';
 import { Pool } from 'pg';
@@ -386,5 +386,150 @@ test('failure after CalendarEntry insertion rolls back the complete order transa
         ['calendar_entries', '0'],
       ],
     );
+  });
+});
+
+test('production order read endpoints enforce ownership and return deterministic cursor pages', async () => {
+  await withOrderApplication(async ({ app, pool, bootstrap }) => {
+    const userA = await bootstrap('orders-read-a');
+    const userB = await bootstrap('orders-read-b');
+    const authA = { Authorization: `Bearer ${userA.accessToken}` };
+    const authB = { Authorization: `Bearer ${userB.accessToken}` };
+
+    await request(app.getHttpServer()).get('/v1/me/orders').expect(401);
+    const a1 = await request(app.getHttpServer())
+      .post('/v1/me/orders')
+      .set(authA)
+      .send(validRequest())
+      .expect(201);
+    const a2 = await request(app.getHttpServer())
+      .post('/v1/me/orders')
+      .set(authA)
+      .send({
+        ...validRequest(),
+        schedule: {
+          startAt: '2026-10-09T10:00:00.000Z',
+          endAt: '2026-10-09T11:00:00.000Z',
+        },
+      })
+      .expect(201);
+    const b1 = await request(app.getHttpServer())
+      .post('/v1/me/orders')
+      .set(authB)
+      .send(validRequest())
+      .expect(201);
+
+    const createdAt = '2026-10-05T12:00:00.000Z';
+    await pool.query(
+      `UPDATE qleanfeel.orders SET created_at = $1, updated_at = $1
+       WHERE id = ANY($2::uuid[])`,
+      [createdAt, [a1.body.order.id, a2.body.order.id]],
+    );
+    await pool.query(
+      `INSERT INTO qleanfeel.order_terms
+       (id, order_id, revision, customer_name, customer_phone,
+        service_description, service_address, quoted_price_amount_minor,
+        quoted_price_currency_code, notes, created_at)
+       VALUES ($1, $2, 2, 'Revision Two', NULL, 'Revised service',
+        '2 New Address', NULL, NULL, NULL, $3)`,
+      [randomUUID(), a2.body.order.id, createdAt],
+    );
+    const extraCleaningId = randomUUID();
+    await pool.query(
+      `INSERT INTO qleanfeel.cleanings
+       (id, order_id, status, calendar_entry_id, created_at, updated_at, version)
+       VALUES ($1, $2, 'planned', NULL, $3, $3, 1)`,
+      [extraCleaningId, a2.body.order.id, createdAt],
+    );
+
+    const aList = await request(app.getHttpServer())
+      .get('/v1/me/orders?limit=1')
+      .set(authA)
+      .expect(200);
+    const expectedOrderIds = [a1.body.order.id, a2.body.order.id].sort(
+      (left: string, right: string) => right.localeCompare(left),
+    );
+    assert.equal(aList.body.items.length, 1);
+    assert.equal(aList.body.items[0].id, expectedOrderIds[0]);
+    assert.equal('ownerUserId' in aList.body.items[0], false);
+    assert.ok(aList.body.nextCursor);
+    const aNext = await request(app.getHttpServer())
+      .get(
+        `/v1/me/orders?limit=1&cursor=${encodeURIComponent(aList.body.nextCursor)}`,
+      )
+      .set(authA)
+      .expect(200);
+    assert.equal(aNext.body.items.length, 1);
+    assert.equal(aNext.body.items[0].id, expectedOrderIds[1]);
+    assert.equal(aNext.body.nextCursor, null);
+    assert.notEqual(aList.body.items[0].id, aNext.body.items[0].id);
+    const a2Item = [aList.body.items[0], aNext.body.items[0]].find(
+      (item: { id: string }) => item.id === a2.body.order.id,
+    );
+    assert.ok(a2Item);
+    assert.equal(a2Item.terms.revision, 2);
+    assert.equal(a2Item.terms.customerName, 'Revision Two');
+    assert.equal(a2Item.cleanings.length, 2);
+    assert.ok(
+      a2Item.cleanings.some(
+        (cleaning: { id: string }) => cleaning.id === extraCleaningId,
+      ),
+    );
+    assert.equal(
+      a2Item.cleanings.find(
+        (cleaning: { calendarEntry: unknown }) =>
+          cleaning.calendarEntry !== null,
+      )?.calendarEntry.status,
+      'scheduled',
+    );
+
+    const bList = await request(app.getHttpServer())
+      .get('/v1/me/orders')
+      .set(authB)
+      .expect(200);
+    assert.deepEqual(
+      bList.body.items.map((item: { id: string }) => item.id),
+      [b1.body.order.id],
+    );
+    const detail = await request(app.getHttpServer())
+      .get(`/v1/me/orders/${a2.body.order.id}`)
+      .set(authA)
+      .expect(200);
+    assert.equal(detail.body.id, a2.body.order.id);
+    assert.equal(detail.body.terms.revision, 2);
+    assert.equal(detail.body.cleanings.length, 2);
+    assert.equal('ownerUserId' in detail.body, false);
+    const foreign = await request(app.getHttpServer())
+      .get(`/v1/me/orders/${b1.body.order.id}`)
+      .set(authA)
+      .expect(404);
+    const missing = await request(app.getHttpServer())
+      .get(`/v1/me/orders/${randomUUID()}`)
+      .set(authA)
+      .expect(404);
+    assert.equal(foreign.body.message, missing.body.message);
+
+    await request(app.getHttpServer())
+      .get('/v1/me/orders?userId=' + userB.userId)
+      .set(authA)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/v1/me/orders?limit=0')
+      .set(authA)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/v1/me/orders?cursor=not-a-cursor')
+      .set(authA)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(`/v1/me/orders/${b1.body.order.id}`)
+      .expect(401);
+
+    const emptyUser = await bootstrap('orders-read-empty');
+    const empty = await request(app.getHttpServer())
+      .get('/v1/me/orders')
+      .set({ Authorization: `Bearer ${emptyUser.accessToken}` })
+      .expect(200);
+    assert.deepEqual(empty.body, { items: [], nextCursor: null });
   });
 });

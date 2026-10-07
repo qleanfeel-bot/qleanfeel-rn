@@ -9,6 +9,10 @@ import {
 } from '../../application/identity/ports/credential-services.js';
 import { CreateManualOrder } from '../../application/orders/create-manual-order.js';
 import { CreateManualOrderPolicy } from '../../application/orders/create-manual-order-policy.js';
+import { GetMyOrder } from '../../application/orders/get-my-order.js';
+import { ListMyOrders } from '../../application/orders/list-my-orders.js';
+import { OrderReadPolicy } from '../../application/orders/order-read-policy.js';
+import { OrderReadRepository } from '../../application/orders/ports/order-read-repository.js';
 import {
   CleaningRepository,
   OrderRepository,
@@ -16,6 +20,7 @@ import {
 } from '../../application/orders/ports/order-repositories.js';
 import { DatabaseModule } from '../persistence/database.module.js';
 import { PostgresOrderRepositories } from '../persistence/postgres-order-repositories.js';
+import { PostgresOrderReadRepository } from '../persistence/postgres-order-read-repository.js';
 import { SystemClock } from '../identity/system-clock.js';
 import { UuidV7Generator } from '../identity/uuid-v7-generator.js';
 import { IdentityModule } from '../identity/identity.module.js';
@@ -54,10 +59,28 @@ const createManualOrderProvider: Provider = {
     ),
 };
 
+const listMyOrdersProvider: Provider = {
+  provide: ListMyOrders,
+  inject: [OrderReadRepository],
+  useFactory: (orders: OrderReadRepository) => new ListMyOrders(orders),
+};
+
+const getMyOrderProvider: Provider = {
+  provide: GetMyOrder,
+  inject: [OrderReadRepository, OrderReadPolicy],
+  useFactory: (orders: OrderReadRepository, policy: OrderReadPolicy) =>
+    new GetMyOrder(orders, policy),
+};
+
 @Module({
   imports: [DatabaseModule, IdentityModule],
   providers: [
     PostgresOrderRepositories,
+    PostgresOrderReadRepository,
+    {
+      provide: OrderReadRepository,
+      useExisting: PostgresOrderReadRepository,
+    },
     {
       provide: CalendarEntryRepository,
       useExisting: PostgresOrderRepositories,
@@ -79,10 +102,13 @@ const createManualOrderProvider: Provider = {
       useExisting: CreateOrderCalendarEntry,
     },
     CreateManualOrderPolicy,
+    OrderReadPolicy,
+    listMyOrdersProvider,
+    getMyOrderProvider,
     { provide: IdentifierGenerator, useClass: UuidV7Generator },
     { provide: Clock, useClass: SystemClock },
     createManualOrderProvider,
   ],
-  exports: [CreateManualOrder],
+  exports: [CreateManualOrder, ListMyOrders, GetMyOrder],
 })
 export class OrdersModule {}
