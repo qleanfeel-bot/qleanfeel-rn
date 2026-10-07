@@ -1,6 +1,6 @@
 # Architecture
 
-For the current and planned module/data-flow views, see the [Living Architecture Map](ARCHITECTURE_MAP.md). This document retains the narrative and milestone-era details; the map uses `main` implementation state while ADRs and the roadmap remain their respective sources of truth.
+For the current and planned module/data-flow views, see the [Living Architecture Map](ARCHITECTURE_MAP.md). This document retains the narrative and milestone-era details; the map distinguishes `main` implementation state from M7-B.5 on its Draft PR branch while ADRs and the roadmap remain their respective sources of truth.
 
 ## Current state — IMPLEMENTED
 
@@ -72,7 +72,7 @@ src/
     └── security/
 ```
 
-The backend is implemented as a NestJS modular-monolith foundation under `backend/src/`, with identity/authentication, health, PostgreSQL persistence, and the Application authorization boundary. M7-B.4 adds its first scoped production Order capability: `CreateManualOrder` at `POST /v1/me/orders`, with canonical Order, OrderTerms, initial Cleaning, and optional CalendarEntry persistence. This implementation is present on the feature branch in Draft PR #11 and is not yet merged into `main`. The broader Orders domain/API, full Calendar CRUD, and future business modules and resources remain planned. The mobile source tree still uses the existing layer folders shown above; the proposed `src/app` / `src/features` structure is not current code.
+The backend is implemented as a NestJS modular-monolith foundation under `backend/src/`, with identity/authentication, health, PostgreSQL persistence, and the Application authorization boundary. M7-B.4 is merged and provides its first scoped production Order capability: `CreateManualOrder` at `POST /v1/me/orders`, with canonical Order, OrderTerms, initial Cleaning, and optional CalendarEntry persistence. M7-B.5 adds `GET /v1/me/orders` and `GET /v1/me/orders/:id` with current terms and Cleaning read representation on its feature branch / Draft PR; it is not yet merged into `main`. The broader Orders domain/API, full Calendar CRUD, and future business modules and resources remain planned. The mobile source tree still uses the existing layer folders shown above; the proposed `src/app` / `src/features` structure is not current code.
 
 ## Architectural principles
 
@@ -111,7 +111,7 @@ development in-memory composition (currently wired)
 
 The production backend implements `POST /v1/auth/bootstrap`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, and `GET /v1/me`. Firebase proves external identity at bootstrap only. Protected requests use Qleanfeel-issued credentials; the access guard resolves the server-side `AuthenticatedPrincipal` after credential, session, and account checks. Invalid credentials receive `401`; a suspended account receives `403`.
 
-The M7-B.3 Application boundary represents permit/deny, policy evaluation, and authorization denial without NestJS or persistence dependencies. It provides generic policy contracts; M7-B.4 adds an operation-specific active-account policy for `CreateManualOrder`, present in Draft PR #11 and not yet merged into `main`. Broader Order ownership, assignment, and participation policies, along with policies for future business resources, remain planned. Client-provided identity, creator, ownership, role, capability, assignment, and session claims are not authorization facts. See [ADR-020](ADR-020-authorization-foundation.md) and [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md). The M7-B.4 rule is scoped to this operation and is not a final role or capability model.
+The M7-B.3 Application boundary represents permit/deny, policy evaluation, and authorization denial without NestJS or persistence dependencies. It provides generic policy contracts; M7-B.4 adds an operation-specific active-account policy for `CreateManualOrder`, now merged into `main`. M7-B.5 adds a pure owner policy for reading a loaded Order on its Draft PR branch. Broader assignment and participation policies, along with policies for future business resources, remain planned. Client-provided identity, creator, ownership, role, capability, assignment, and session claims are not authorization facts. See [ADR-020](ADR-020-authorization-foundation.md), [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md), and [ADR-022](ADR-022-order-retrieval-read-path.md). The M7-B.4 rule is scoped to its operation and is not a final role or capability model.
 
 HTTP semantics remain distinct: `401 Unauthorized` means authentication is absent or invalid; `403 Forbidden` means the authenticated caller is denied, including the existing suspended-account behavior. A future resource API may deliberately return `404` to hide resource existence. Mapping belongs to HTTP adapters.
 
@@ -194,7 +194,7 @@ CalendarScreen
   → development in-memory HTTP handler
 ```
 
-The full production Calendar API and general Calendar persistence workflows do not exist yet. M7-B.4 adds CalendarEntry persistence only as part of canonical Order creation when a schedule is requested; that implementation is in Draft PR #11 and is not merged into `main`. The in-memory handler remains a development implementation of the mobile HTTP boundary.
+The full production Calendar API and general Calendar persistence workflows do not exist yet. M7-B.4 adds CalendarEntry persistence only as part of canonical Order creation when a schedule is requested, merged into `main`. M7-B.5 reads the optional CalendarEntry through the Cleaning association on its Draft PR branch. The in-memory handler remains a development implementation of the mobile HTTP boundary.
 
 `CalendarEntry` contains `id`, `startAt`, `endAt`, `type`, `status`, and `title`. `startAt` and `endAt` are absolute UTC ISO-8601 timestamps and must satisfy `startAt < endAt`. Calendar intervals use half-open semantics `[startAt, endAt)`. Initial types are `external_order`, `blocked`, and `personal`; statuses are `scheduled`, `cancelled`, and `completed`.
 
@@ -210,9 +210,9 @@ PATCH  /v1/me/calendar/entries/{entryId}
 DELETE /v1/me/calendar/entries/{entryId}
 ```
 
-For GET, both range bounds are required, `from < to`, and an entry is returned when `entry.startAt < to && from < entry.endAt`. These Calendar CRUD endpoints are contracts exercised by the development handler; they do not imply a production Calendar CRUD API. The scoped M7-B.4 Order-creation path separately persists a scheduled CalendarEntry in Draft PR #11.
+For GET, both range bounds are required, `from < to`, and an entry is returned when `entry.startAt < to && from < entry.endAt`. These Calendar CRUD endpoints are contracts exercised by the development handler; they do not imply a production Calendar CRUD API. M7-B.4 separately persists a scheduled CalendarEntry through canonical Order creation and is merged into `main`.
 
-### Manual Orders — MOBILE DEVELOPMENT FLOW AND CANONICAL PRODUCTION CREATE PATH IN DRAFT PR #11
+### Manual Orders — MOBILE DEVELOPMENT FLOW AND CANONICAL PRODUCTION ORDER PATH
 
 ManualOrder is a separate domain entity from CalendarEntry. It owns customer and service snapshots, address, optional phone/quoted price/notes, its server-assigned `id` and `createdAt`, and a `calendarEntryId` reference. It does not contain `startAt`, `endAt`, `userId`, or an Order status. Client create requests do not contain server-owned IDs, timestamps, user identity, or status.
 
@@ -238,9 +238,9 @@ POST /v1/me/manual-orders
 GET  /v1/me/manual-orders/{orderId}
 ```
 
-`CreateScheduledManualOrder` coordinates Calendar creation and ManualOrder creation through the existing application services. If M4 ManualOrder creation fails after Calendar creation, it attempts to delete the newly created CalendarEntry and propagates the original failure. If compensation also fails, it returns a safe compensation error. This M4 flow remains development-only and is not a transaction. The separate canonical `POST /v1/me/orders` production path, with persistence and atomic Order/Cleaning/optional scheduling, is implemented in Draft PR #11 and is not yet merged into `main`.
+`CreateScheduledManualOrder` coordinates Calendar creation and ManualOrder creation through the existing application services. If M4 ManualOrder creation fails after Calendar creation, it attempts to delete the newly created CalendarEntry and propagates the original failure. If compensation also fails, it returns a safe compensation error. This M4 flow remains development-only and is not a transaction. The separate canonical `POST /v1/me/orders` production path, with persistence and atomic Order/Cleaning/optional scheduling, was added in M7-B.4 and is merged into `main`.
 
-The development HTTP router explicitly sends `/v1/me/manual-orders` requests to the in-memory ManualOrder handler. ManualOrder and Calendar state created through that M4 development flow are process-local and are lost when the development composition is recreated. The canonical production Order persistence is present on the Draft PR #11 feature branch, but is not yet part of `main` and is not connected to the mobile flow.
+The development HTTP router explicitly sends `/v1/me/manual-orders` requests to the in-memory ManualOrder handler. ManualOrder and Calendar state created through that M4 development flow are process-local and are lost when the development composition is recreated. The production backend's canonical Order create and read paths are separate from, and not connected to, the mobile flow. M7-B.5 read endpoints are on the feature branch / Draft PR and are not yet merged into `main`.
 
 ### M5 — Cleaner Application Shell & Navigation — IMPLEMENTED
 
