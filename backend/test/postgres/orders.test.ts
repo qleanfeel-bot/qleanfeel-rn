@@ -575,6 +575,49 @@ test('Cleaning lifecycle commands persist execution state without changing Order
       endAt: '2026-10-09T11:00:00.000Z',
     });
     await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}/lifecycle`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}`)
+      .set(otherAuth)
+      .expect(404);
+    await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}/lifecycle`)
+      .set(otherAuth)
+      .expect(404);
+    await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${randomUUID()}`)
+      .set(ownerAuth)
+      .expect(404);
+    await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${randomUUID()}/lifecycle`)
+      .set(ownerAuth)
+      .expect(404);
+    await request(app.getHttpServer())
+      .get('/v1/me/cleanings/not-a-uuid')
+      .set(ownerAuth)
+      .expect(400);
+    const initialRead = await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(initialRead.body.id, completed.cleaningId);
+    assert.equal(initialRead.body.orderId, completed.orderId);
+    assert.equal(initialRead.body.calendarEntryId, completed.calendarEntryId);
+    assert.equal(initialRead.body.status, 'planned');
+    assert.equal(initialRead.body.startedAt, null);
+    assert.equal(initialRead.body.completedAt, null);
+    assert.equal(initialRead.body.version, 1);
+    const emptyLifecycle = await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}/lifecycle`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.deepEqual(emptyLifecycle.body, { items: [] });
+
+    await request(app.getHttpServer())
       .post(`/v1/me/cleanings/${completed.cleaningId}/start`)
       .expect(401);
     await request(app.getHttpServer())
@@ -613,6 +656,14 @@ test('Cleaning lifecycle commands persist execution state without changing Order
     assert.ok(started.body.startedAt);
     assert.equal(started.body.completedAt, null);
 
+    const startedRead = await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(startedRead.body.status, 'in_progress');
+    assert.equal(startedRead.body.startedAt, started.body.startedAt);
+    assert.equal(startedRead.body.version, 2);
+
     const done = await request(app.getHttpServer())
       .post(`/v1/me/cleanings/${completed.cleaningId}/complete`)
       .set(ownerAuth)
@@ -624,6 +675,51 @@ test('Cleaning lifecycle commands persist execution state without changing Order
       .post(`/v1/me/cleanings/${completed.cleaningId}/complete`)
       .set(ownerAuth)
       .expect(409);
+
+    const canonicalRead = await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(canonicalRead.body.status, 'completed');
+    assert.equal(canonicalRead.body.startedAt, started.body.startedAt);
+    assert.equal(canonicalRead.body.completedAt, done.body.completedAt);
+    assert.equal(canonicalRead.body.version, 3);
+    // Equal timestamps must still preserve per-Cleaning transition order.
+    await pool.query(
+      `UPDATE qleanfeel.cleaning_lifecycle_events
+       SET occurred_at = '2026-10-01T00:00:00.000Z'
+       WHERE cleaning_id = $1`,
+      [completed.cleaningId],
+    );
+    const lifecycleRead = await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${completed.cleaningId}/lifecycle`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.deepEqual(
+      lifecycleRead.body.items.map(
+        (event: {
+          eventType: string;
+          version: number;
+          actorUserId: string;
+        }) => [event.eventType, event.version, event.actorUserId],
+      ),
+      [
+        ['started', 2, owner.userId],
+        ['completed', 3, owner.userId],
+      ],
+    );
+    assert.ok(
+      Date.parse(lifecycleRead.body.items[0].occurredAt) <=
+        Date.parse(lifecycleRead.body.items[1].occurredAt),
+    );
+    assert.equal(
+      lifecycleRead.body.items[0].occurredAt,
+      lifecycleRead.body.items[1].occurredAt,
+    );
+    await request(app.getHttpServer())
+      .delete(`/v1/me/cleanings/${completed.cleaningId}/lifecycle`)
+      .set(ownerAuth)
+      .expect(404);
 
     const orderState = await pool.query<{
       order_status: string;
