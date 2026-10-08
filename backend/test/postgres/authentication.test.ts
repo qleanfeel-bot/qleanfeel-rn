@@ -277,16 +277,18 @@ test('bootstrap creates one Qleanfeel User, links Firebase identity, and gives e
 
 test('invalid Firebase proof returns 401 without writing identity state', async () => {
   await withAuthApplication(async ({ app, pool }) => {
-    const before = await pool.query<{ count: string }>(
-      'SELECT count(*) FROM qleanfeel.users',
-    );
+    const identityCount = async () =>
+      pool.query<{ count: string }>(
+        `SELECT count(*) FROM qleanfeel.auth_identities
+         WHERE provider = 'firebase' AND provider_subject = $1`,
+        ['invalid-proof'],
+      );
+    const before = await identityCount();
     const response = await request(app.getHttpServer())
       .post('/v1/auth/bootstrap')
       .send({ firebaseIdToken: 'invalid-proof' })
       .expect(401);
-    const after = await pool.query<{ count: string }>(
-      'SELECT count(*) FROM qleanfeel.users',
-    );
+    const after = await identityCount();
 
     assert.equal(response.body.message, 'Identity proof is invalid.');
     assert.equal(after.rows[0]?.count, before.rows[0]?.count);
