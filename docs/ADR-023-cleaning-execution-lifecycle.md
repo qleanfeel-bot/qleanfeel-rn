@@ -30,6 +30,16 @@ The trusted `AuthenticatedPrincipal.userId` may operate only on Cleanings whose 
 
 Lifecycle commands are explicit: `start`, `complete`, `partially-complete`, `cancel`, and `not-performed`. They return the current Cleaning representation. They do not mutate `Order.status` or `CalendarEntry.status`; Calendar remains scheduling state and is not proof of work. Order lifecycle remains independent.
 
+## M7-B.7 — Retrieval and lifecycle history
+
+`GET /v1/me/cleanings/:id` reads the current canonical Cleaning row, including its current status, relationship IDs, lifecycle timestamps, creation/update timestamps, and version. It does not reconstruct state from events. `GET /v1/me/cleanings/:id/lifecycle` is a separate read use case over the existing `cleaning_lifecycle_events` table and returns the canonical event fields (`id`, `cleaningId`, `eventType`, `actorUserId`, `occurredAt`, `recordedAt`, and `version`). No event payload or second history representation is introduced.
+
+Lifecycle events are returned oldest first by `occurredAt`, with `version` ascending as the deterministic tie-breaker. The version is unique within one Cleaning by the existing `(cleaning_id, version)` constraint and reflects its transition order. The existing event lookup needs no new index or migration.
+
+Both reads resolve Cleaning and its Order owner fact in the application-facing read repository, then apply a pure resource policy. The principal may read only when its user ID owns the Order. Missing and non-owned Cleanings both map to `404`. Reads are ordinary queries outside UnitOfWork; the existing atomic state-plus-event write transaction remains the consistency guarantee. A history request returns committed events visible to that query under normal PostgreSQL read semantics.
+
+The event table remains immutable business history, not the source of current Cleaning truth, event sourcing, or a generic audit/event framework. History is available only through the dedicated lifecycle endpoint; it is not embedded in the current Cleaning representation.
+
 ## WorkAcceptance and settlement boundary
 
 Future `WorkAcceptance` is separate from Cleaning execution status and may eventually carry worker and client confirmation for physical work beyond cleaning. M7-B.6 does not implement WorkAcceptance, either confirmation, proof-of-work, or customer permissions. The backend remains authoritative for execution and any future acceptance facts.

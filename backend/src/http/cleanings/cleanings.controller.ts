@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Inject,
@@ -18,6 +19,8 @@ import {
   CleaningVersionConflictError,
 } from '../../application/cleanings/cleaning-lifecycle-errors.js';
 import { CompleteCleaning } from '../../application/cleanings/complete-cleaning.js';
+import { GetMyCleaning } from '../../application/cleanings/get-my-cleaning.js';
+import { GetMyCleaningLifecycle } from '../../application/cleanings/get-my-cleaning-lifecycle.js';
 import { MarkCleaningNotPerformed } from '../../application/cleanings/mark-cleaning-not-performed.js';
 import { PartiallyCompleteCleaning } from '../../application/cleanings/partially-complete-cleaning.js';
 import { StartCleaning } from '../../application/cleanings/start-cleaning.js';
@@ -58,7 +61,50 @@ export class CleaningsController {
     @Inject(CancelCleaning) private readonly cancelCleaning: CancelCleaning,
     @Inject(MarkCleaningNotPerformed)
     private readonly markCleaningNotPerformed: MarkCleaningNotPerformed,
+    @Inject(GetMyCleaning)
+    private readonly getMyCleaning: GetMyCleaning,
+    @Inject(GetMyCleaningLifecycle)
+    private readonly getMyCleaningLifecycle: GetMyCleaningLifecycle,
   ) {}
+
+  @Get(':id')
+  async get(
+    @CurrentAuthenticatedPrincipal() principal: AuthenticatedPrincipal,
+    @Param('id') id: string,
+  ) {
+    this.assertCleaningId(id);
+    try {
+      return mapCleaning(await this.getMyCleaning.execute(principal, id));
+    } catch (error) {
+      this.mapNotFound(error);
+      throw error;
+    }
+  }
+
+  @Get(':id/lifecycle')
+  async lifecycle(
+    @CurrentAuthenticatedPrincipal() principal: AuthenticatedPrincipal,
+    @Param('id') id: string,
+  ) {
+    this.assertCleaningId(id);
+    try {
+      const events = await this.getMyCleaningLifecycle.execute(principal, id);
+      return {
+        items: events.map(event => ({
+          id: event.id,
+          cleaningId: event.cleaningId,
+          eventType: event.eventType,
+          actorUserId: event.actorUserId,
+          occurredAt: event.occurredAt.toISOString(),
+          recordedAt: event.recordedAt.toISOString(),
+          version: event.version,
+        })),
+      };
+    } catch (error) {
+      this.mapNotFound(error);
+      throw error;
+    }
+  }
 
   @Post(':id/start')
   @HttpCode(HttpStatus.OK)
@@ -116,27 +162,13 @@ export class CleaningsController {
     id: string,
     body: unknown,
   ) {
-    if (!UUID_PATTERN.test(id)) {
-      throw new BadRequestException('Cleaning id must be a UUID.');
-    }
+    this.assertCleaningId(id);
     assertEmptyCleaningCommandBody(body);
     try {
       const cleaning = await command.execute(principal, id);
-      return {
-        id: cleaning.id,
-        orderId: cleaning.orderId,
-        calendarEntryId: cleaning.calendarEntryId,
-        status: cleaning.status,
-        startedAt: cleaning.startedAt?.toISOString() ?? null,
-        completedAt: cleaning.completedAt?.toISOString() ?? null,
-        createdAt: cleaning.createdAt.toISOString(),
-        updatedAt: cleaning.updatedAt.toISOString(),
-        version: cleaning.version,
-      };
+      return mapCleaning(cleaning);
     } catch (error) {
-      if (error instanceof CleaningNotFoundError) {
-        throw new NotFoundException('Cleaning was not found.');
-      }
+      this.mapNotFound(error);
       if (
         error instanceof InvalidCleaningTransitionError ||
         error instanceof CleaningVersionConflictError
@@ -151,6 +183,42 @@ export class CleaningsController {
       throw error;
     }
   }
+
+  private assertCleaningId(id: string): void {
+    if (!UUID_PATTERN.test(id)) {
+      throw new BadRequestException('Cleaning id must be a UUID.');
+    }
+  }
+
+  private mapNotFound(error: unknown): void {
+    if (error instanceof CleaningNotFoundError) {
+      throw new NotFoundException('Cleaning was not found.');
+    }
+  }
+}
+
+function mapCleaning(cleaning: {
+  readonly id: string;
+  readonly orderId: string;
+  readonly calendarEntryId: string | null;
+  readonly status: string;
+  readonly startedAt: Date | null;
+  readonly completedAt: Date | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly version: number;
+}) {
+  return {
+    id: cleaning.id,
+    orderId: cleaning.orderId,
+    calendarEntryId: cleaning.calendarEntryId,
+    status: cleaning.status,
+    startedAt: cleaning.startedAt?.toISOString() ?? null,
+    completedAt: cleaning.completedAt?.toISOString() ?? null,
+    createdAt: cleaning.createdAt.toISOString(),
+    updatedAt: cleaning.updatedAt.toISOString(),
+    version: cleaning.version,
+  };
 }
 
 const UUID_PATTERN =
