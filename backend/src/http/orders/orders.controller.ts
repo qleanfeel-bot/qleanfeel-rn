@@ -185,6 +185,8 @@ function mapOrderReadModel(order: OrderReadModel) {
     cleanings: order.cleanings.map(cleaning => ({
       id: cleaning.id,
       status: cleaning.status,
+      startedAt: cleaning.startedAt?.toISOString() ?? null,
+      completedAt: cleaning.completedAt?.toISOString() ?? null,
       calendarEntry: cleaning.calendarEntry
         ? {
             id: cleaning.calendarEntry.id,

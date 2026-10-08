@@ -102,6 +102,7 @@ test('authorization application code has no HTTP, persistence, or provider impor
     '../src/application/authorization/authorization-decision.ts',
     '../src/application/authorization/resource-authorization-policy.ts',
     '../src/application/authorization/authorization-errors.ts',
+    '../src/application/cleanings/cleaning-lifecycle-policy.ts',
   ];
   const forbiddenImport =
     /from\s+['"](?:@nestjs\/|drizzle-orm|pg|firebase-admin)/;

@@ -14,7 +14,7 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M4 — Manual Orders | Manual order create/list/details flow, linked Calendar scheduling, and development HTTP composition | **COMPLETE** |
 | M5 — Cleaner Application Shell & Navigation | Authenticated Home, Calendar, Orders, and Profile root surfaces with nested Calendar/Orders navigation | **COMPLETE** |
 | M6 — Backend & Business Architecture Definition | Canonical business model and future backend/API boundaries; architecture only | **ARCHITECTURE APPROVED — IMPLEMENTATION DEFERRED** |
-| M7 — Production Backend Foundation | Production modular-monolith architecture, persistence/auth boundaries, canonical commands, and implementation plan | **M7-B.1–B.4 COMPLETE — MERGED; M7-B.5 IMPLEMENTED IN DRAFT PR — NOT MERGED** |
+| M7 — Production Backend Foundation | Production modular-monolith architecture, persistence/auth boundaries, canonical commands, and implementation plan | **M7-B.1–B.5 COMPLETE — MERGED; M7-B.6 IMPLEMENTED IN DRAFT PR — NOT MERGED** |
 | M8 — Reports | Reporting workflows | **PLANNED** |
 | M9 — Notifications | Notification workflows | **PLANNED** |
 | M10 — Client/Marketplace foundations | Initial client and marketplace foundations | **PLANNED** |
@@ -97,7 +97,7 @@ A later product decision may reorganize the root information architecture as **H
 
 ### M7 — Production Backend Foundation
 
-M7 selected NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions, and application-level authorization boundaries. M7-B.1 through M7-B.4 are merged to `main`. The current implementation state is summarized in [ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md); decisions remain in [ADR-018](ADR-018-production-backend-foundation.md), [ADR-019](ADR-019-identity-authentication-foundation.md), [ADR-020](ADR-020-authorization-foundation.md), and [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md).
+M7 selected NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions, and application-level authorization boundaries. M7-B.1 through M7-B.5 are merged to `main`. The current implementation state is summarized in [ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md); decisions remain in [ADR-018](ADR-018-production-backend-foundation.md) through [ADR-023](ADR-023-cleaning-execution-lifecycle.md).
 
 ### M7-B.4 — Canonical Order + Initial Cleaning + Optional Calendar Scheduling
 
@@ -109,7 +109,8 @@ Architecture is approved in [ADR-021](ADR-021-canonical-order-creation-and-optio
 | M7-B.2 — Identity + Authentication Foundation | Firebase identity proof, Qleanfeel sessions/credentials, and protected identity endpoints | **COMPLETE — MERGED** |
 | M7-B.3 — Authorization Foundation | Framework-independent Application authorization boundary | **COMPLETE — MERGED** |
 | M7-B.4 — Canonical Order + Initial Cleaning + Optional Calendar Scheduling | ADR-021 production command, persistence, guarded endpoint, and transaction tests | **COMPLETE — MERGED** |
-| M7-B.5 — Order Retrieval / Orders Read Path | Authenticated owner-scoped collection/detail reads, current terms, Cleanings, optional CalendarEntry, cursor pagination | **IMPLEMENTED — DRAFT PR; NOT MERGED** |
+| M7-B.5 — Order Retrieval / Orders Read Path | Authenticated owner-scoped collection/detail reads, current terms, Cleanings, optional CalendarEntry, cursor pagination | **COMPLETE — MERGED** |
+| M7-B.6 — Cleaning Execution Lifecycle | Explicit owner-authorized execution commands, timestamps, versioned transitions, durable lifecycle history | **IMPLEMENTED — DRAFT PR; NOT MERGED** |
 
 ## Remote-first development
 

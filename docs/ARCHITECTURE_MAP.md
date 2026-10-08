@@ -1,8 +1,8 @@
 # Qleanfeel Living Architecture Map
 
-This document is a visual guide to the repository architecture. It distinguishes code currently present in `main`, M7-B.5 work on its feature branch, and later product ideas. “Current” does not claim that a component is deployed.
+This document is a visual guide to the repository architecture. It distinguishes code currently present in `main`, M7-B.6 work on its feature branch, and later product ideas. “Current” does not claim that a component is deployed.
 
-The map does not replace architectural decisions or milestone status. See [ADRs](DECISIONS.md) for decisions and [ROADMAP.md](ROADMAP.md) for milestone status. `main` contains M7-B.1–B.4; M7-B.5 is implemented on its Draft PR feature branch and is not merged.
+The map does not replace architectural decisions or milestone status. See [ADRs](DECISIONS.md) for decisions and [ROADMAP.md](ROADMAP.md) for milestone status. `main` contains M7-B.1–B.5; M7-B.6 is implemented on its Draft PR feature branch and is not merged.
 
 ## 1. System Context
 
@@ -10,8 +10,8 @@ The map does not replace architectural decisions or milestone status. See [ADRs]
 flowchart LR
   Mobile["Mobile App<br/>CURRENT IN REPOSITORY<br/>development composition"]
   DevHTTP["Development HTTP handlers<br/>CURRENT IN REPOSITORY<br/>in-memory"]
-  Backend["Qleanfeel Backend API<br/>CURRENT IN REPOSITORY<br/>health, identity/authentication, /me, POST /v1/me/orders"]
-  DB[("PostgreSQL<br/>CURRENT IN REPOSITORY<br/>identity/session and M7-B.4 business schemas")]
+  Backend["Qleanfeel Backend API<br/>CURRENT IN REPOSITORY<br/>identity, POST/GET /v1/me/orders;<br/>Cleaning commands — M7-B.6 Draft PR"]
+  DB[("PostgreSQL<br/>CURRENT IN REPOSITORY<br/>identity, Order/Terms/Cleaning/Calendar;<br/>lifecycle history — M7-B.6 Draft PR")]
   Firebase["Firebase<br/>CURRENT EXTERNAL PROVIDER<br/>identity proof at bootstrap"]
   Client["Client App<br/>FUTURE"]
   Other["Finance/accounting, evidence/photos,<br/>notifications, Web3, external integrations<br/>FUTURE"]
@@ -128,13 +128,15 @@ The initial Cleaning assignment, if present in this slice, is derived from the s
 flowchart TB
   subgraph Http["HTTP / NestJS — CURRENT IN REPOSITORY"]
     IdentityHTTP["Identity HTTP<br/>bootstrap, refresh, logout, /me"]
-    OrdersHTTP["Orders HTTP<br/>POST, GET /v1/me/orders — main<br/>GET /v1/me/orders/:id — M7-B.5 Draft PR"]
+    OrdersHTTP["Orders HTTP<br/>POST, GET /v1/me/orders<br/>GET /v1/me/orders/:id — main"]
+    CleaningHTTP["Cleaning HTTP<br/>five explicit lifecycle commands — M7-B.6 Draft PR"]
     Health["Health"]
   end
 
   subgraph Application["Application — CURRENT FOUNDATION"]
     IdentityUC["Identity use cases"]
-    OrdersUC["CreateManualOrder — main<br/>ListMyOrders / GetMyOrder — M7-B.5 Draft PR"]
+    OrdersUC["CreateManualOrder / ListMyOrders / GetMyOrder — main"]
+    CleaningUC["Start / Complete / PartialComplete / Cancel / NotPerformed — M7-B.6 Draft PR"]
     AuthZ["Authorization decision, denial,<br/>resource-policy boundary"]
     Ports["Repository, credential, verifier,<br/>clock, ID, UnitOfWork ports"]
   end
@@ -148,15 +150,19 @@ flowchart TB
     FirebaseAdapter["Firebase identity-proof verifier"]
     CredentialAdapters["Qleanfeel access / refresh adapters"]
     PostgresAdapters["PostgreSQL identity repositories<br/>and UnitOfWork"]
-    BusinessAdapters["PostgreSQL business write + read adapters<br/>write path — main; read path — M7-B.5 Draft PR"]
+    BusinessAdapters["PostgreSQL Order write/read adapters — main"]
+    CleaningAdapter["PostgreSQL Cleaning lifecycle adapter — M7-B.6 Draft PR"]
   end
 
   DB[("PostgreSQL identity/session and<br/>Order/Cleaning/Calendar schema")]
   IdentityHTTP --> IdentityUC
   OrdersHTTP --> OrdersUC
+  CleaningHTTP --> CleaningUC
   OrdersUC --> BusinessDomain
   OrdersUC --> AuthZ
   OrdersUC --> Ports
+  CleaningUC --> AuthZ
+  CleaningUC --> Ports
   IdentityUC --> IdentityDomain
   IdentityUC --> Ports
   FirebaseAdapter -->|"implements verifier port"| Ports
@@ -165,18 +171,21 @@ flowchart TB
   BusinessAdapters -->|"implement business repository ports"| Ports
   PostgresAdapters --> DB
   BusinessAdapters --> DB
+  CleaningAdapter --> DB
 
   Orders["Orders create command — main"]
   Cleaning["Initial Cleaning persistence — main"]
   Calendar["Calendar scheduling port — main<br/>no full Calendar API"]
+  Lifecycle["Cleaning execution lifecycle + history — M7-B.6 Draft PR"]
   Profile["Profile backend — FUTURE"]
   Orders -.-> Application
   Cleaning -.-> Application
   Calendar -.-> Application
+  Lifecycle -.-> Application
   Profile -.-> Application
 ```
 
-Authorization is Application code, not a separate NestJS module. The policy does not load resources, use infrastructure, or manage transactions. M7-B.4 introduces its operation-specific policy with the first business use case; other business modules remain future work.
+Authorization is Application code, not a separate NestJS module. Policies do not load resources, use infrastructure, or manage transactions. M7-B.4–B.5 policies are on `main`; M7-B.6 operation-specific resource policies are on its Draft PR branch. The active account and Order owner facts are resolved outside those policies.
 
 ## 5. Business Data Model
 
@@ -192,7 +201,7 @@ flowchart LR
     AuthSession -->|"1 to 0..N rotated tokens"| Refresh
   end
 
-  subgraph Business["M7-B.4 BUSINESS DATA — MERGED TO MAIN"]
+  subgraph Business["CANONICAL ORDER DATA — M7-B.4/B.5 MERGED TO MAIN"]
     Order["Order"]
     Terms["OrderTerms<br/>initial terms snapshot"]
     Cleaning["Cleaning"]
@@ -201,11 +210,17 @@ flowchart LR
     Order -->|"0..N via Cleaning.orderId"| Cleaning
     Cleaning -->|"0..1 via Cleaning.calendarEntryId"| Entry
   end
+  subgraph Lifecycle["M7-B.6 EXECUTION HISTORY — DRAFT PR"]
+    Events["CleaningLifecycleEvent<br/>append-only transition facts"]
+    Timestamps["Cleaning.startedAt / completedAt"]
+    Cleaning --> Events
+    Cleaning --> Timestamps
+  end
 ```
 
-`Order → 0..N Cleaning` is the global relationship. The `CreateManualOrder` command creates exactly one initial Cleaning. `CalendarEntry` is Calendar-owned and represents a planned appointment; it has no direct Order or Cleaning reference. Calendar completion does not mean that Cleaning was performed. Cleaning remains the source of work-execution truth.
+`Order → 0..N Cleaning` is the global relationship. The `CreateManualOrder` command creates exactly one initial Cleaning. `CalendarEntry` is Calendar-owned and represents a planned appointment; it has no direct Order or Cleaning reference. Calendar completion does not mean that Cleaning was performed. Cleaning status is execution truth; it does not change Order lifecycle or Calendar schedule state. Durable transition history is being added in M7-B.6.
 
-The diagram omits future customer, finance, evidence, event-history, and capability-management models. They are not introduced by M7-B.4 or M7-B.5.
+The diagram omits future customer, finance, WorkAcceptance, evidence, settlement, and capability-management models. M7-B.6 lifecycle history is an append-only relational audit trail, not a generic event bus.
 
 ## 6. Atomic CreateManualOrder Flow
 
@@ -242,7 +257,30 @@ All listed writes and the Cleaning-to-CalendarEntry relation use the same UnitOf
 
 M7-B.4 does not provide generic API idempotency. A client retry after a lost response can create a duplicate; this risk is explicitly deferred to a future API reliability slice.
 
-## 7. Authentication Flow
+## 7. Cleaning Execution Command Flow
+
+```mermaid
+flowchart TB
+  Request["POST /v1/me/cleanings/:id/{command}<br/>M7-B.6 Draft PR"] --> Guard["Qleanfeel access guard"]
+  Guard --> Principal["AuthenticatedPrincipal"]
+  Principal --> Load["Load Cleaning + Order owner facts"]
+  Load --> Policy["Operation-specific owner policy"]
+  Policy --> Domain["Explicit Cleaning domain transition"]
+  Domain --> UOW["One UnitOfWork"]
+  subgraph Tx["One PostgreSQL transaction"]
+    CAS["Compare-and-set status, timestamps, version"] --> Event["Append lifecycle event"] --> Commit["Commit"]
+  end
+  UOW --> CAS
+  Commit --> DTO["Current Cleaning response"]
+  OrderState["Order lifecycle"] -. unchanged .- Domain
+  CalendarState["Calendar schedule state"] -. unchanged .- Domain
+  Acceptance["Future WorkAcceptance"] -. separate concept .- Domain
+  Settlement["Future settlement / Web3 adapter"] -. infrastructure boundary .- Acceptance
+```
+
+The policy receives loaded ownership facts and does not access persistence. Cleaning owns transition validity. A version conflict or invalid transition returns `409`; missing and non-owned resources share `404`. State and history event are committed or rolled back together. The commands do not mutate Order or Calendar state.
+
+## 8. Authentication Flow
 
 ```mermaid
 sequenceDiagram
@@ -264,21 +302,21 @@ sequenceDiagram
 
 This backend flow is implemented in the repository. The current mobile app still uses development authentication and is not connected to it. Firebase proves identity during bootstrap; protected API requests use Qleanfeel credentials and a server-resolved principal.
 
-## 8. Legend, Status Semantics, and Sources
+## 9. Legend, Status Semantics, and Sources
 
 | Notation | Meaning |
 | --- | --- |
 | `CURRENT IN REPOSITORY` | Implemented on `main`; this does not assert deployment. |
 | `IMPLEMENTED ON MAIN` | Implemented and merged to `main`; this does not assert deployment. |
-| `M7-B.5 DRAFT PR` | Implemented on the M7-B.5 feature branch, not yet merged to `main`. |
+| `M7-B.6 DRAFT PR` | Implemented on the M7-B.6 feature branch, not yet merged to `main`. |
 | `PLANNED` | Approved or proposed work not implemented in the current slice. |
-| `FUTURE` | Outside M7-B.4/B.5 and not implemented. |
+| `FUTURE` | Outside M7-B.4–B.6 and not implemented. |
 | Solid arrow | The call, dependency, or data flow shown; status comes from the node or containing boundary. |
 | Dashed arrow | Planned or future interaction/data flow. |
 | Subgraph | Architectural or ownership boundary. |
 | Database cylinder | Persisted state. |
 | UnitOfWork boundary | One transaction; enclosed writes commit or roll back together. |
 
-Architectural decisions remain in [ADR-011 — Calendar](ADR-011-calendar.md), [ADR-012 — ManualOrder compatibility](ADR-012-manual-orders.md), [ADR-014 — Canonical Order and work execution](ADR-014-canonical-order-and-work-execution.md), [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md), [ADR-019 — Identity and Authentication](ADR-019-identity-authentication-foundation.md), [ADR-020 — Authorization Foundation](ADR-020-authorization-foundation.md), and [ADR-021 — M7-B.4 Order creation](ADR-021-canonical-order-creation-and-optional-scheduling.md). The [M6 proposal](M6_ARCHITECTURE_PROPOSAL.md) and [M7 proposal](M7_ARCHITECTURE_PROPOSAL.md) provide broader context. Milestone status remains in [ROADMAP.md](ROADMAP.md).
+Architectural decisions remain in [ADR-011 — Calendar](ADR-011-calendar.md), [ADR-012 — ManualOrder compatibility](ADR-012-manual-orders.md), [ADR-014 — Canonical Order and work execution](ADR-014-canonical-order-and-work-execution.md), [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md), [ADR-019 — Identity and Authentication](ADR-019-identity-authentication-foundation.md), [ADR-020 — Authorization Foundation](ADR-020-authorization-foundation.md), [ADR-021 — M7-B.4 Order creation](ADR-021-canonical-order-creation-and-optional-scheduling.md), [ADR-022 — M7-B.5 Order retrieval](ADR-022-order-retrieval-read-path.md), and [ADR-023 — M7-B.6 Cleaning lifecycle](ADR-023-cleaning-execution-lifecycle.md). The [M6 proposal](M6_ARCHITECTURE_PROPOSAL.md) and [M7 proposal](M7_ARCHITECTURE_PROPOSAL.md) provide broader context. Milestone status remains in [ROADMAP.md](ROADMAP.md).
 
 Update this map alongside a milestone decision when module ownership, an API boundary, persistence, or a transaction boundary changes. Keep detailed rules in ADRs and milestone progress in the roadmap; do not copy those details here.

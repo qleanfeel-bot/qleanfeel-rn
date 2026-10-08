@@ -35,6 +35,8 @@ export interface OrderReadCalendarEntry {
 export interface OrderReadCleaning {
   readonly id: string;
   readonly status: CleaningStatus;
+  readonly startedAt: Date | null;
+  readonly completedAt: Date | null;
   readonly calendarEntry: OrderReadCalendarEntry | null;
 }
 

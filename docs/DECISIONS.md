@@ -20,10 +20,11 @@ Reference material: [M6 Architecture Proposal](M6_ARCHITECTURE_PROPOSAL.md) and 
 - [ADR-020 — Authorization Foundation](ADR-020-authorization-foundation.md): framework-independent application policy boundary using a trusted principal and server-derived resource facts; no RBAC, capability persistence, or business resource implementation.
 - [ADR-021 — Canonical Order Creation and Optional Scheduling](ADR-021-canonical-order-creation-and-optional-scheduling.md): M7-B.4 active-account authorization, one initial Cleaning, optional CalendarEntry, atomic UnitOfWork, and deferred idempotency.
 - [ADR-022 — Order Retrieval Read Path](ADR-022-order-retrieval-read-path.md): M7-B.5 current-user collection/detail reads, ownership concealment, latest terms, and cursor pagination.
+- [ADR-023 — Cleaning Execution Lifecycle](ADR-023-cleaning-execution-lifecycle.md): M7-B.6 execution transitions, ownership authorization, durable lifecycle history, and separation from acceptance/settlement.
 - [M7 Architecture Proposal](M7_ARCHITECTURE_PROPOSAL.md): canonical approved module, command, persistence, API, security, operations, and mobile migration architecture.
 - [Living Architecture Map](ARCHITECTURE_MAP.md): visual current/planned structure and data-flow guide; ADRs remain the decision source.
 
-M7-B.1 through M7-B.4 are merged to `main`. ADR-021 remains the approved decision source for B.4. M7-B.5 Order Retrieval is implemented on the feature branch in its Draft PR and is not yet merged. ADR-018 records explicit M7 selections for choices that M6 deferred. It does not rewrite the M6 historical record or change existing M1–M5 mobile contracts. In particular, the Firebase bearer-token plan recorded under ADR-008 is historical and is superseded for the protected production API by Qleanfeel-issued session credentials after bootstrap.
+M7-B.1 through M7-B.5 are merged to `main`. ADR-021 and ADR-022 remain the decision sources for those slices. M7-B.6 Cleaning Execution Lifecycle is implemented on its feature branch in a Draft PR and is not yet merged; ADR-023 records its boundaries. ADR-018 records explicit M7 selections for choices that M6 deferred. It does not rewrite the M6 historical record or change existing M1–M5 mobile contracts. In particular, the Firebase bearer-token plan recorded under ADR-008 is historical and is superseded for the protected production API by Qleanfeel-issued session credentials after bootstrap.
 
 ## ADR-001 — React Native as the mobile application framework
 

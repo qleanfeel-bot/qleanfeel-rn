@@ -83,9 +83,9 @@ The user reports that the following physical Android smoke flows passed. No addi
 11. Calendar `external_order` creation.
 12. The created `external_order` opens through OrderDetails.
 
-## M7 Backend Foundation — B.1–B.4 MERGED; B.5 IMPLEMENTED / DRAFT PR
+## M7 Backend Foundation — B.1–B.5 MERGED; B.6 IMPLEMENTED / DRAFT PR
 
-The backend verification suite uses `node:test` through `tsx --test`. Unit/HTTP coverage includes backend configuration, identity use cases, HTTP behavior, persistence bootstrap, authorization, and Order retrieval. PostgreSQL integration coverage is in `backend/test/postgres/` and requires the repository's `TEST_DATABASE_URL` setup. The configured [CI workflow](../.github/workflows/ci.yml) runs backend format, lint, typecheck, unit, PostgreSQL integration, and build checks.
+The backend verification suite uses `node:test` through `tsx --test`. Unit/HTTP coverage includes backend configuration, identity use cases, HTTP behavior, persistence bootstrap, authorization, Order retrieval, and Cleaning lifecycle commands. PostgreSQL integration coverage is in `backend/test/postgres/` and requires the repository's `TEST_DATABASE_URL` setup. The configured [CI workflow](../.github/workflows/ci.yml) runs backend format, lint, typecheck, unit, PostgreSQL integration, and build checks.
 
 | Test category | Status | Current coverage |
 | --- | --- | --- |
@@ -93,11 +93,12 @@ The backend verification suite uses `node:test` through `tsx --test`. Unit/HTTP 
 | Authorization boundary unit tests | **IMPLEMENTED** | `backend/test/authorization.test.ts`; framework-independent policy boundary and `backend/test/order-reads.test.ts` owner policy/use-case behavior. |
 | PostgreSQL authentication and UnitOfWork integration tests | **IMPLEMENTED** | `backend/test/postgres/authentication.test.ts`, `unit-of-work.test.ts`, and `readiness.test.ts`; execution requires configured PostgreSQL 18. |
 | M7-B.4 CreateManualOrder tests | **IMPLEMENTED — MERGED** | `backend/test/orders.test.ts` and `backend/test/postgres/orders.test.ts` cover canonical graph creation and full rollback after Calendar persistence failure. |
-| M7-B.5 Order Retrieval tests | **IMPLEMENTED IN DRAFT PR** | `backend/test/order-reads.test.ts` covers owner-scoped application use cases, empty results, cursor continuation input, limit validation, current terms, multiple Cleanings, and optional CalendarEntry. `backend/test/postgres/orders.test.ts` covers authenticated list/detail, 401/404 concealment, owner isolation, latest terms, multiple Cleanings, optional CalendarEntry, deterministic tie-break ordering, cursor pages, invalid query and empty collection. PostgreSQL execution requires the configured database. |
+| M7-B.5 Order Retrieval tests | **IMPLEMENTED — MERGED** | `backend/test/order-reads.test.ts` covers owner-scoped application use cases, empty results, cursor continuation input, limit validation, current terms, multiple Cleanings, and optional CalendarEntry. `backend/test/postgres/orders.test.ts` covers authenticated list/detail, 401/404 concealment, owner isolation, latest terms, multiple Cleanings, optional CalendarEntry, deterministic tie-break ordering, cursor pages, invalid query and empty collection. |
+| M7-B.6 Cleaning lifecycle tests | **IMPLEMENTED IN DRAFT PR** | `backend/test/cleaning-lifecycle-domain.test.ts` covers all valid transitions, invalid transitions from terminal states, timestamp and version behavior. `backend/test/cleaning-lifecycle.test.ts` covers explicit commands, ownership policy, missing/non-owned resources, invalid transition, version conflict, and event creation. `backend/test/postgres/orders.test.ts` covers HTTP auth/ownership/error semantics, persisted timestamps/version/events, no Order/Calendar side effects, event-failure rollback, and concurrent stale starts. PostgreSQL execution requires the configured database. |
 
 ## M6 Architecture — APPROVED, DESIGN ONLY
 
-The M6 architecture and Domain/Data Dictionary are design artifacts, not an M6 software implementation. M7-B.1–B.4 are merged; B.4 provides the first production Order/Cleaning/Calendar consistency path. M7-B.5 adds the owner-scoped read path on its Draft PR branch. Later Money, tax, Dashboard, Messaging, Evidence, and Settlement behavior remains unimplemented and requires tests when approved code exists. M6 does not define accounting invariants or tax calculations to test.
+The M6 architecture and Domain/Data Dictionary are design artifacts, not an M6 software implementation. M7-B.1–B.5 are merged; B.4 provides canonical Order creation and B.5 its owner-scoped read path. M7-B.6 adds Cleaning execution lifecycle and audit history on its Draft PR branch. WorkAcceptance, settlement, and Web3 remain separate future concepts and are not implemented by B.6. Later Money, tax, Dashboard, Messaging, Evidence, and settlement behavior requires tests when approved code exists.
 
 ## Future integration tests
 
@@ -127,7 +128,7 @@ The mobile auth foundation and its boundary-level tests are implemented. These t
 | Mobile Firebase login, credential transfer, and session restoration | **PLANNED** | The backend Firebase identity-proof verifier and Qleanfeel auth APIs are implemented; the mobile app still uses a development auth adapter and is not connected to them. |
 | Real authentication restoration and provider sign-out | **PLANNED** | Controller behavior with fake ports is tested; restoration/logout against a real provider remains unverified. |
 | Backend 401/403 handling, user provisioning/bootstrap, and current-user retrieval | **IMPLEMENTED** | Backend tests cover Qleanfeel bootstrap/session authentication and `/v1/me`; mobile `HttpTransport` remains connected to a development handler. |
-| Application authorization boundary | **IMPLEMENTED** | M7-B.3 provides the framework-independent policy boundary; M7-B.5 uses a pure Order ownership policy over already loaded resource facts. Future assignment/participation policies remain out of scope. |
+| Application authorization boundary | **IMPLEMENTED** | M7-B.3 provides the framework-independent policy boundary; M7-B.5 and B.6 use pure ownership policies over already loaded resource facts. Future assignment/participation policies remain out of scope. |
 | M1.7 final test coverage | **IMPLEMENTED** | At M1 completion, 44 Jest tests passed across the four suites then present. The current full repository suite is 30 suites / 276 tests. Coverage uses fakes and does not claim real provider/backend integration. |
 | M1.8 CI verification | **IMPLEMENTED** | CI is green for TypeScript, ESLint, Jest, Android debug/release builds, and debug/release APK artifacts. |
 | M1.9 release APK + physical-device verification | **IMPLEMENTED** | Release APK was installed and tested successfully on physical Android hardware using the development auth composition. This does not verify Firebase/backend auth or production signing. |

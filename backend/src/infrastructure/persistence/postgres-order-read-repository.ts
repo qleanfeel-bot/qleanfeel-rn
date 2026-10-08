@@ -80,6 +80,8 @@ export class PostgresOrderReadRepository extends OrderReadRepository {
           orderId: cleanings.orderId,
           cleaningId: cleanings.id,
           cleaningStatus: cleanings.status,
+          cleaningStartedAt: cleanings.startedAt,
+          cleaningCompletedAt: cleanings.completedAt,
           calendarEntryId: calendarEntries.id,
           calendarStartAt: calendarEntries.startAt,
           calendarEndAt: calendarEntries.endAt,
@@ -145,6 +147,8 @@ export class PostgresOrderReadRepository extends OrderReadRepository {
       items.push({
         id: row.cleaningId,
         status: row.cleaningStatus as CleaningStatus,
+        startedAt: row.cleaningStartedAt,
+        completedAt: row.cleaningCompletedAt,
         calendarEntry,
       });
       cleaningsByOrder.set(row.orderId, items);

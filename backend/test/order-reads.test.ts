@@ -43,10 +43,18 @@ function order(id: string, ownerUserId = userA.userId): OrderReadModel {
       createdAt: timestamp,
     },
     cleanings: [
-      { id: `cleaning-${id}-1`, status: 'planned', calendarEntry: null },
+      {
+        id: `cleaning-${id}-1`,
+        status: 'planned',
+        startedAt: null,
+        completedAt: null,
+        calendarEntry: null,
+      },
       {
         id: `cleaning-${id}-2`,
         status: 'planned',
+        startedAt: null,
+        completedAt: null,
         calendarEntry: {
           id: `calendar-${id}`,
           startAt: timestamp,

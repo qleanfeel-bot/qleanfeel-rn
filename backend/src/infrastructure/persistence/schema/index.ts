@@ -227,6 +227,8 @@ export const cleanings = applicationSchema.table(
       { onDelete: 'restrict' },
     ),
     status: text('status').notNull(),
+    startedAt: instant('started_at'),
+    completedAt: instant('completed_at'),
     createdAt: instant('created_at').notNull(),
     updatedAt: instant('updated_at').notNull(),
     version: integer('version').notNull(),
@@ -237,7 +239,51 @@ export const cleanings = applicationSchema.table(
       sql`${table.status} IN ('planned', 'in_progress', 'completed', 'partially_completed', 'not_performed', 'cancelled')`,
     ),
     check('cleanings_version_check', sql`${table.version} > 0`),
+    check(
+      'cleanings_started_at_status_check',
+      sql`(${table.status} IN ('in_progress', 'completed', 'partially_completed') AND ${table.startedAt} IS NOT NULL) OR (${table.status} IN ('planned', 'cancelled') AND ${table.startedAt} IS NULL) OR ${table.status} = 'not_performed'`,
+    ),
+    check(
+      'cleanings_completed_at_status_check',
+      sql`(${table.status} IN ('completed', 'partially_completed', 'not_performed')) = (${table.completedAt} IS NOT NULL)`,
+    ),
+    check(
+      'cleanings_lifecycle_time_order_check',
+      sql`(${table.startedAt} IS NULL OR ${table.startedAt} <= ${table.updatedAt}) AND (${table.completedAt} IS NULL OR ${table.completedAt} <= ${table.updatedAt}) AND (${table.startedAt} IS NULL OR ${table.completedAt} IS NULL OR ${table.startedAt} <= ${table.completedAt})`,
+    ),
     uniqueIndex('cleanings_calendar_entry_unique').on(table.calendarEntryId),
     index('cleanings_order_created_idx').on(table.orderId, table.createdAt),
+  ],
+);
+
+export const cleaningLifecycleEvents = applicationSchema.table(
+  'cleaning_lifecycle_events',
+  {
+    id: uuid('id').primaryKey(),
+    cleaningId: uuid('cleaning_id')
+      .notNull()
+      .references(() => cleanings.id, { onDelete: 'restrict' }),
+    eventType: text('event_type').notNull(),
+    actorUserId: uuid('actor_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    occurredAt: instant('occurred_at').notNull(),
+    recordedAt: instant('recorded_at').notNull(),
+    version: integer('version').notNull(),
+  },
+  table => [
+    check(
+      'cleaning_lifecycle_events_type_check',
+      sql`${table.eventType} IN ('started', 'completed', 'partially_completed', 'cancelled', 'not_performed')`,
+    ),
+    check('cleaning_lifecycle_events_version_check', sql`${table.version} > 1`),
+    check(
+      'cleaning_lifecycle_events_recorded_order_check',
+      sql`${table.occurredAt} <= ${table.recordedAt}`,
+    ),
+    uniqueIndex('cleaning_lifecycle_events_cleaning_version_unique').on(
+      table.cleaningId,
+      table.version,
+    ),
   ],
 );
