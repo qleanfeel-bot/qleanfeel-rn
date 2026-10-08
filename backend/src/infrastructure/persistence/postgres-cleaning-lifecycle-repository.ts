@@ -21,25 +21,20 @@ export class PostgresCleaningLifecycleRepository implements CleaningLifecyclePor
   ) {}
 
   async findForLifecycle(cleaningId: string, context: UnitOfWorkContext) {
-    const [row] = await this.transaction(context)
-      .select({
-        id: cleanings.id,
-        orderId: cleanings.orderId,
-        calendarEntryId: cleanings.calendarEntryId,
-        status: cleanings.status,
-        startedAt: cleanings.startedAt,
-        completedAt: cleanings.completedAt,
-        createdAt: cleanings.createdAt,
-        updatedAt: cleanings.updatedAt,
-        version: cleanings.version,
-        orderOwnerUserId: orders.createdByUserId,
-      })
+    const transaction = this.transaction(context);
+    const [row] = await transaction
+      .select()
       .from(cleanings)
-      .innerJoin(orders, eq(cleanings.orderId, orders.id))
       .where(eq(cleanings.id, cleaningId))
       .limit(1)
-      .for('update', { of: cleanings });
+      .for('update');
     if (!row) return undefined;
+    const [order] = await transaction
+      .select({ ownerUserId: orders.createdByUserId })
+      .from(orders)
+      .where(eq(orders.id, row.orderId))
+      .limit(1);
+    if (!order) return undefined;
     return {
       cleaning: Cleaning.reconstitute({
         id: row.id,
@@ -52,7 +47,7 @@ export class PostgresCleaningLifecycleRepository implements CleaningLifecyclePor
         updatedAt: row.updatedAt,
         version: row.version,
       }),
-      orderOwnerUserId: row.orderOwnerUserId,
+      orderOwnerUserId: order.ownerUserId,
     };
   }
 
