@@ -1,8 +1,8 @@
 # Qleanfeel Living Architecture Map
 
-This document is a visual guide to the repository architecture. It distinguishes code currently present in the repository from approved M7-B.4 work and later product ideas. “Current” does not claim that a component is deployed.
+This document is a visual guide to the repository architecture. It distinguishes code currently present in `main`, M7-B.5 work on its feature branch, and later product ideas. “Current” does not claim that a component is deployed.
 
-The map does not replace architectural decisions or milestone status. See [ADRs](DECISIONS.md) for decisions and [ROADMAP.md](ROADMAP.md) for milestone status. `main` contains M7-B.3; M7-B.4 is implemented on Draft PR #11 and is not merged.
+The map does not replace architectural decisions or milestone status. See [ADRs](DECISIONS.md) for decisions and [ROADMAP.md](ROADMAP.md) for milestone status. `main` contains M7-B.1–B.4; M7-B.5 is implemented on its Draft PR feature branch and is not merged.
 
 ## 1. System Context
 
@@ -101,7 +101,7 @@ flowchart LR
     Features --> Contracts --> Memory
   end
 
-  subgraph B4["IMPLEMENTED IN DRAFT PR #11 — PRODUCTION CREATE PATH"]
+  subgraph B4["M7-B.4 — MERGED PRODUCTION CREATE PATH"]
     OrdersFeature["Orders feature"]
     Request["Client input: business terms<br/>optional schedule.startAt / schedule.endAt"]
     Route["POST /v1/me/orders"]
@@ -128,27 +128,27 @@ The initial Cleaning assignment, if present in this slice, is derived from the s
 flowchart TB
   subgraph Http["HTTP / NestJS — CURRENT IN REPOSITORY"]
     IdentityHTTP["Identity HTTP<br/>bootstrap, refresh, logout, /me"]
-    OrdersHTTP["Orders HTTP<br/>POST /v1/me/orders — DRAFT PR #11"]
+    OrdersHTTP["Orders HTTP<br/>POST, GET /v1/me/orders — main<br/>GET /v1/me/orders/:id — M7-B.5 Draft PR"]
     Health["Health"]
   end
 
   subgraph Application["Application — CURRENT FOUNDATION"]
     IdentityUC["Identity use cases"]
-    OrdersUC["CreateManualOrder<br/>and Calendar schedule port — DRAFT PR #11"]
+    OrdersUC["CreateManualOrder — main<br/>ListMyOrders / GetMyOrder — M7-B.5 Draft PR"]
     AuthZ["Authorization decision, denial,<br/>resource-policy boundary"]
     Ports["Repository, credential, verifier,<br/>clock, ID, UnitOfWork ports"]
   end
 
   subgraph Domain["Domain — CURRENT IN REPOSITORY"]
     IdentityDomain["User, AuthIdentity,<br/>AuthSession, refresh-token concepts"]
-    BusinessDomain["Order, OrderTerms,<br/>Cleaning, CalendarEntry — DRAFT PR #11"]
+    BusinessDomain["Order, OrderTerms,<br/>Cleaning, CalendarEntry — main"]
   end
 
   subgraph Infrastructure["Infrastructure — CURRENT IN REPOSITORY"]
     FirebaseAdapter["Firebase identity-proof verifier"]
     CredentialAdapters["Qleanfeel access / refresh adapters"]
     PostgresAdapters["PostgreSQL identity repositories<br/>and UnitOfWork"]
-    BusinessAdapters["PostgreSQL business repositories<br/>— DRAFT PR #11"]
+    BusinessAdapters["PostgreSQL business write + read adapters<br/>write path — main; read path — M7-B.5 Draft PR"]
   end
 
   DB[("PostgreSQL identity/session and<br/>Order/Cleaning/Calendar schema")]
@@ -166,9 +166,9 @@ flowchart TB
   PostgresAdapters --> DB
   BusinessAdapters --> DB
 
-  Orders["Orders create command — IMPLEMENTED IN DRAFT PR #11"]
-  Cleaning["Initial Cleaning persistence — IMPLEMENTED IN DRAFT PR #11"]
-  Calendar["Calendar scheduling port — IMPLEMENTED IN DRAFT PR #11<br/>no full Calendar API"]
+  Orders["Orders create command — main"]
+  Cleaning["Initial Cleaning persistence — main"]
+  Calendar["Calendar scheduling port — main<br/>no full Calendar API"]
   Profile["Profile backend — FUTURE"]
   Orders -.-> Application
   Cleaning -.-> Application
@@ -192,7 +192,7 @@ flowchart LR
     AuthSession -->|"1 to 0..N rotated tokens"| Refresh
   end
 
-  subgraph Business["M7-B.4 BUSINESS DATA — IMPLEMENTED IN DRAFT PR #11"]
+  subgraph Business["M7-B.4 BUSINESS DATA — MERGED TO MAIN"]
     Order["Order"]
     Terms["OrderTerms<br/>initial terms snapshot"]
     Cleaning["Cleaning"]
@@ -205,18 +205,18 @@ flowchart LR
 
 `Order → 0..N Cleaning` is the global relationship. The `CreateManualOrder` command creates exactly one initial Cleaning. `CalendarEntry` is Calendar-owned and represents a planned appointment; it has no direct Order or Cleaning reference. Calendar completion does not mean that Cleaning was performed. Cleaning remains the source of work-execution truth.
 
-The diagram omits future customer, finance, evidence, event-history, and capability-management models. They are not introduced by M7-B.4.
+The diagram omits future customer, finance, evidence, event-history, and capability-management models. They are not introduced by M7-B.4 or M7-B.5.
 
 ## 6. Atomic CreateManualOrder Flow
 
 ```mermaid
 flowchart TB
-  Request["POST /v1/me/orders<br/>IMPLEMENTED IN DRAFT PR #11"] --> Guard["Qleanfeel access guard<br/>CURRENT FOUNDATION"]
+  Request["POST /v1/me/orders<br/>IMPLEMENTED ON MAIN"] --> Guard["Qleanfeel access guard<br/>CURRENT FOUNDATION"]
   Guard --> Principal["AuthenticatedPrincipal<br/>server checked current account status"]
   Principal --> Policy["CreateManualOrder policy<br/>active account is checked by guard"]
-  Policy --> UseCase["CreateManualOrder application use case<br/>IMPLEMENTED IN DRAFT PR #11"]
+  Policy --> UseCase["CreateManualOrder application use case<br/>IMPLEMENTED ON MAIN"]
 
-  subgraph UOW["IMPLEMENTED IN DRAFT PR #11 — ONE UnitOfWork / ONE database transaction"]
+  subgraph UOW["IMPLEMENTED ON MAIN — ONE UnitOfWork / ONE database transaction"]
     SaveOrder["Persist Order<br/>origin=manual; status=confirmed<br/>creator=principal.userId"]
     SaveTerms["Persist initial OrderTerms"]
     SaveCleaning["Persist exactly one initial Cleaning<br/>status=planned"]
@@ -255,7 +255,7 @@ sequenceDiagram
   Client->>API: POST /v1/auth/bootstrap with Firebase identity proof
   API->>Firebase: Verify identity proof
   Firebase-->>API: Normalized provider and subject
-  API->>DB: Resolve User/AuthIdentity; create AuthSession and refresh-token hash
+  API->>DB: Resolve User/AuthIdentity and create AuthSession and refresh-token hash
   API-->>Client: Qleanfeel access and refresh credentials
   Client->>API: Protected request with Qleanfeel access credential
   API->>DB: Validate current User and AuthSession
@@ -269,9 +269,10 @@ This backend flow is implemented in the repository. The current mobile app still
 | Notation | Meaning |
 | --- | --- |
 | `CURRENT IN REPOSITORY` | Implemented on `main`; this does not assert deployment. |
-| `IMPLEMENTED IN DRAFT PR #11` | Implemented on the feature branch, not yet merged to `main`. |
-| `PLANNED FOR M7-B.4` | Approved work outside the implementation currently in Draft PR #11. |
-| `FUTURE` | Outside M7-B.4 and not implemented. |
+| `IMPLEMENTED ON MAIN` | Implemented and merged to `main`; this does not assert deployment. |
+| `M7-B.5 DRAFT PR` | Implemented on the M7-B.5 feature branch, not yet merged to `main`. |
+| `PLANNED` | Approved or proposed work not implemented in the current slice. |
+| `FUTURE` | Outside M7-B.4/B.5 and not implemented. |
 | Solid arrow | The call, dependency, or data flow shown; status comes from the node or containing boundary. |
 | Dashed arrow | Planned or future interaction/data flow. |
 | Subgraph | Architectural or ownership boundary. |

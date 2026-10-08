@@ -1,11 +1,11 @@
 # M7 — Production Backend Foundation
 
-- **Status:** Approved architecture; M7-B.1–B.3 implemented and merged; M7-B.4 implementation present in Draft PR #11, not merged
+- **Status:** Approved architecture; M7-B.1–B.4 implemented and merged; M7-B.5 read path on feature branch / Draft PR, not merged
 - **Baseline:** M6 architecture in [M6_ARCHITECTURE_PROPOSAL.md](M6_ARCHITECTURE_PROPOSAL.md), [ADR-014](ADR-014-canonical-order-and-work-execution.md), [ADR-016](ADR-016-business-modules-api-transactions-and-home.md), and [ADR-017](ADR-017-messaging-evidence-and-settlement-boundaries.md)
 - **Historical code baseline:** M7-A began from `59c2636989f5abea5b936c936c7308fb5db3b052` (M5). This records the proposal's original baseline, not the current repository state.
 - **Related decision record:** [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md)
 
-This proposal records the approved M7 architecture. M7-B.1–B.3 are implemented on `main`. The M7-B.4 business architecture is specified by [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md); its implementation is present on the feature branch in Draft PR #11 and is not yet merged into `main`. Current milestone status is tracked in [ROADMAP.md](ROADMAP.md).
+This proposal records the approved M7 architecture. M7-B.1–B.4 are implemented on `main`. The M7-B.4 business architecture is specified by [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md). M7-B.5 Order Retrieval is implemented on its feature branch / Draft PR and is not yet merged into `main`. Current milestone status is tracked in [ROADMAP.md](ROADMAP.md), with its decision in [ADR-022](ADR-022-order-retrieval-read-path.md).
 
 ## 1. Scope
 
@@ -314,4 +314,4 @@ The following are intentionally not fixed by M7 architecture:
 
 ## 15. Implementation boundary
 
-**M7 architecture has been approved.** M7-B.1–B.3 code and persistence are implemented on `main`. M7-B.4 production business code, migrations, and `POST /v1/me/orders` are implemented on the feature branch in Draft PR #11; they are not yet part of `main`.
+**M7 architecture has been approved.** M7-B.1–B.4 code and persistence are implemented on `main`. M7-B.5 implements owner-scoped Order collection/detail retrieval on the feature branch / Draft PR; it is not yet part of `main`.
