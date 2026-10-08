@@ -99,6 +99,17 @@ class TestCalendarRepository extends CalendarEntryRepository {
     if (this.fail) throw new Error('calendar write failed');
     this.values.push(value);
   }
+  async findForUpdate(entryId: string) {
+    return this.values.find(entry => entry.id === entryId);
+  }
+  async updateSchedule(entry: CalendarEntry, expectedVersion: number) {
+    const index = this.values.findIndex(value => value.id === entry.id);
+    if (index < 0 || this.values[index]?.version !== expectedVersion) {
+      return false;
+    }
+    this.values[index] = entry;
+    return true;
+  }
 }
 
 function setup() {

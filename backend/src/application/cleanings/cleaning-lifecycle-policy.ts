@@ -9,6 +9,8 @@ export const CLEANING_LIFECYCLE_OPERATIONS = {
   PARTIALLY_COMPLETE: 'partially_complete_cleaning',
   CANCEL: 'cancel_cleaning',
   MARK_NOT_PERFORMED: 'mark_cleaning_not_performed',
+  SCHEDULE: 'schedule_cleaning',
+  RESCHEDULE: 'reschedule_cleaning',
 } as const;
 
 export type CleaningLifecycleOperation =

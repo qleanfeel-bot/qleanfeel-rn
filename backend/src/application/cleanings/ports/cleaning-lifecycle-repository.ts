@@ -8,7 +8,11 @@ export interface CleaningLifecycleRecord {
 }
 
 export abstract class CleaningLifecycleRepository {
-  /** Loads Cleaning state and its Order ownership facts using the active transaction. */
+  /**
+   * Loads and locks Cleaning state plus its Order owner fact in the active
+   * transaction. The row lock protects coordinated schedule/execution checks
+   * until the UnitOfWork commits or rolls back.
+   */
   abstract findForLifecycle(
     cleaningId: string,
     context: UnitOfWorkContext,
@@ -16,6 +20,12 @@ export abstract class CleaningLifecycleRepository {
 
   /** Compare-and-set state using the version read with the resource. */
   abstract updateState(
+    cleaning: Cleaning,
+    expectedVersion: number,
+    context: UnitOfWorkContext,
+  ): Promise<boolean>;
+
+  abstract associateScheduledCalendarEntry(
     cleaning: Cleaning,
     expectedVersion: number,
     context: UnitOfWorkContext,

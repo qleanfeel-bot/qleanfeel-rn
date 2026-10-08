@@ -109,6 +109,11 @@ const getMyOrderProvider: Provider = {
     { provide: Clock, useClass: SystemClock },
     createManualOrderProvider,
   ],
-  exports: [CreateManualOrder, ListMyOrders, GetMyOrder],
+  exports: [
+    CreateManualOrder,
+    ListMyOrders,
+    GetMyOrder,
+    CalendarScheduleCreator,
+  ],
 })
 export class OrdersModule {}

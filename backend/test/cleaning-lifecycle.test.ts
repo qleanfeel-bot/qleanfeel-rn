@@ -58,6 +58,7 @@ class TestLifecycleRepository extends CleaningLifecycleRepository {
   updateCalls = 0;
   failCompareAndSet = false;
   failEventAppend = false;
+  associateCalls = 0;
 
   async findForLifecycle() {
     return this.record;
@@ -68,6 +69,25 @@ class TestLifecycleRepository extends CleaningLifecycleRepository {
     if (
       this.failCompareAndSet ||
       this.record?.cleaning.version !== expectedVersion
+    ) {
+      return false;
+    }
+    this.record = {
+      cleaning,
+      orderOwnerUserId: this.record.orderOwnerUserId,
+    };
+    return true;
+  }
+
+  async associateScheduledCalendarEntry(
+    cleaning: Cleaning,
+    expectedVersion: number,
+  ) {
+    this.associateCalls += 1;
+    if (
+      this.record?.cleaning.version !== expectedVersion ||
+      this.record.cleaning.status !== 'planned' ||
+      this.record.cleaning.calendarEntryId !== null
     ) {
       return false;
     }

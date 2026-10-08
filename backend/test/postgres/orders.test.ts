@@ -796,6 +796,573 @@ test('Cleaning lifecycle commands persist execution state without changing Order
   });
 });
 
+test('Cleaning scheduling and rescheduling preserve ownership, versions, and Calendar identity', async () => {
+  await withOrderApplication(async ({ app, pool, bootstrap }) => {
+    const owner = await bootstrap('cleaning-schedule-owner');
+    const other = await bootstrap('cleaning-schedule-other');
+    const suspended = await bootstrap('cleaning-schedule-suspended');
+    const ownerAuth = { Authorization: `Bearer ${owner.accessToken}` };
+    const otherAuth = { Authorization: `Bearer ${other.accessToken}` };
+    await pool.query(
+      "UPDATE qleanfeel.users SET status = 'suspended' WHERE id = $1",
+      [suspended.userId],
+    );
+    const created = await request(app.getHttpServer())
+      .post('/v1/me/orders')
+      .set(ownerAuth)
+      .send(validRequest())
+      .expect(201);
+    const cleaningId = created.body.initialCleaning.id as string;
+    const schedule = {
+      startAt: '2026-10-12T10:00:00.000Z',
+      endAt: '2026-10-12T11:00:00.000Z',
+    };
+
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .set({ Authorization: `Bearer ${suspended.accessToken}` })
+      .send({
+        schedule: {
+          startAt: '2026-10-12T10:00:00.000Z',
+          endAt: '2026-10-12T11:00:00.000Z',
+        },
+        expectedCleaningVersion: 1,
+      })
+      .expect(403);
+    await request(app.getHttpServer())
+      .post('/v1/me/cleanings/not-a-uuid/schedule')
+      .set(ownerAuth)
+      .send({ schedule, expectedCleaningVersion: 1 })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .set(ownerAuth)
+      .send({ schedule, expectedCleaningVersion: 1, ownerId: owner.userId })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .set(ownerAuth)
+      .send({})
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .set(otherAuth)
+      .send({ schedule, expectedCleaningVersion: 1 })
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${randomUUID()}/schedule`)
+      .set(ownerAuth)
+      .send({ schedule, expectedCleaningVersion: 1 })
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .set(ownerAuth)
+      .send({
+        schedule: { startAt: schedule.endAt, endAt: schedule.startAt },
+        expectedCleaningVersion: 1,
+      })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .set(ownerAuth)
+      .send({
+        schedule,
+        expectedCleaningVersion: 1,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(409);
+
+    const scheduled = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .set(ownerAuth)
+      .send({ schedule, expectedCleaningVersion: 1 })
+      .expect(200);
+    assert.equal(scheduled.body.status, 'planned');
+    assert.equal(scheduled.body.version, 2);
+    assert.ok(scheduled.body.calendarEntryId);
+    assert.equal(scheduled.body.startedAt, null);
+    assert.equal(scheduled.body.completedAt, null);
+    assert.ok(scheduled.body.createdAt);
+    assert.ok(scheduled.body.updatedAt);
+    const calendarId = scheduled.body.calendarEntryId as string;
+
+    const persisted = await pool.query<{
+      cleaning_calendar_entry_id: string | null;
+      cleaning_version: number;
+      entry_owner_id: string;
+      entry_status: string;
+      entry_version: number;
+      start_at: Date;
+      end_at: Date;
+    }>(
+      `SELECT c.calendar_entry_id AS cleaning_calendar_entry_id,
+              c.version AS cleaning_version,
+              e.owner_user_id AS entry_owner_id, e.status AS entry_status,
+              e.version AS entry_version, e.start_at, e.end_at
+       FROM qleanfeel.cleanings c
+       JOIN qleanfeel.calendar_entries e ON e.id = c.calendar_entry_id
+       WHERE c.id = $1`,
+      [cleaningId],
+    );
+    assert.equal(persisted.rows[0]?.cleaning_calendar_entry_id, calendarId);
+    assert.equal(persisted.rows[0]?.cleaning_version, 2);
+    assert.equal(persisted.rows[0]?.entry_owner_id, owner.userId);
+    assert.equal(persisted.rows[0]?.entry_status, 'scheduled');
+    assert.equal(persisted.rows[0]?.entry_version, 1);
+    assert.equal(persisted.rows[0]?.start_at.toISOString(), schedule.startAt);
+    assert.equal(persisted.rows[0]?.end_at.toISOString(), schedule.endAt);
+
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .set(ownerAuth)
+      .send({ schedule, expectedCleaningVersion: 2 })
+      .expect(409);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/schedule`)
+      .set(ownerAuth)
+      .send({ schedule, expectedCleaningVersion: 1 })
+      .expect(409);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .set(otherAuth)
+      .send({
+        schedule,
+        expectedCleaningVersion: 2,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${randomUUID()}/reschedule`)
+      .set(ownerAuth)
+      .send({
+        schedule,
+        expectedCleaningVersion: 1,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/v1/me/cleanings/not-a-uuid/reschedule')
+      .set(ownerAuth)
+      .send({
+        schedule,
+        expectedCleaningVersion: 1,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .set({ Authorization: `Bearer ${suspended.accessToken}` })
+      .send({
+        schedule,
+        expectedCleaningVersion: 1,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(403);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .set(ownerAuth)
+      .send({
+        schedule: { startAt: schedule.endAt, endAt: schedule.startAt },
+        expectedCleaningVersion: 1,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(400);
+    const nextSchedule = {
+      startAt: '2026-10-13T12:00:00.000Z',
+      endAt: '2026-10-13T13:00:00.000Z',
+    };
+    const rescheduled = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .set(ownerAuth)
+      .send({
+        schedule: nextSchedule,
+        expectedCleaningVersion: 2,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(200);
+    assert.equal(rescheduled.body.calendarEntryId, calendarId);
+    assert.equal(rescheduled.body.version, 2);
+    assert.equal(rescheduled.body.status, 'planned');
+    assert.equal(rescheduled.body.startedAt, null);
+    assert.equal(rescheduled.body.completedAt, null);
+
+    const afterReschedule = await pool.query<{
+      calendar_entry_id: string;
+      cleaning_version: number;
+      entry_version: number;
+      start_at: Date;
+      end_at: Date;
+    }>(
+      `SELECT c.calendar_entry_id, c.version AS cleaning_version,
+              e.version AS entry_version, e.start_at, e.end_at
+       FROM qleanfeel.cleanings c
+       JOIN qleanfeel.calendar_entries e ON e.id = c.calendar_entry_id
+       WHERE c.id = $1`,
+      [cleaningId],
+    );
+    assert.equal(afterReschedule.rows[0]?.calendar_entry_id, calendarId);
+    assert.equal(afterReschedule.rows[0]?.cleaning_version, 2);
+    assert.equal(afterReschedule.rows[0]?.entry_version, 2);
+    assert.equal(
+      afterReschedule.rows[0]?.start_at.toISOString(),
+      nextSchedule.startAt,
+    );
+    assert.equal(
+      afterReschedule.rows[0]?.end_at.toISOString(),
+      nextSchedule.endAt,
+    );
+
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .set(ownerAuth)
+      .send({
+        schedule,
+        expectedCleaningVersion: 1,
+        expectedCalendarEntryVersion: 2,
+      })
+      .expect(409);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .set(ownerAuth)
+      .send({
+        schedule,
+        expectedCleaningVersion: 2,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(409);
+
+    const lifecycle = await request(app.getHttpServer())
+      .get(`/v1/me/cleanings/${cleaningId}/lifecycle`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.deepEqual(lifecycle.body, { items: [] });
+
+    const racedSchedule = {
+      startAt: '2026-10-14T14:00:00.000Z',
+      endAt: '2026-10-14T15:00:00.000Z',
+    };
+    const race = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+        .set(ownerAuth)
+        .send({
+          schedule: racedSchedule,
+          expectedCleaningVersion: 2,
+          expectedCalendarEntryVersion: 2,
+        }),
+      request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+        .set(ownerAuth)
+        .send({
+          schedule: {
+            startAt: '2026-10-15T14:00:00.000Z',
+            endAt: '2026-10-15T15:00:00.000Z',
+          },
+          expectedCleaningVersion: 2,
+          expectedCalendarEntryVersion: 2,
+        }),
+    ]);
+    assert.deepEqual(race.map(response => response.status).sort(), [200, 409]);
+    const finalVersions = await pool.query<{
+      cleaning_version: number;
+      entry_version: number;
+    }>(
+      `SELECT c.version AS cleaning_version, e.version AS entry_version
+       FROM qleanfeel.cleanings c
+       JOIN qleanfeel.calendar_entries e ON e.id = c.calendar_entry_id
+       WHERE c.id = $1`,
+      [cleaningId],
+    );
+    assert.equal(finalVersions.rows[0]?.cleaning_version, 2);
+    assert.equal(finalVersions.rows[0]?.entry_version, 3);
+
+    const started = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/start`)
+      .set(ownerAuth)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cleaningId}/reschedule`)
+      .set(ownerAuth)
+      .send({
+        schedule,
+        expectedCleaningVersion: started.body.version,
+        expectedCalendarEntryVersion: 3,
+      })
+      .expect(409);
+
+    const terminalOrder = await request(app.getHttpServer())
+      .post('/v1/me/orders')
+      .set(ownerAuth)
+      .send({
+        ...validRequest(),
+        schedule: {
+          startAt: '2026-10-21T10:00:00.000Z',
+          endAt: '2026-10-21T11:00:00.000Z',
+        },
+      })
+      .expect(201);
+    const terminalCleaningId = terminalOrder.body.initialCleaning.id as string;
+    const terminalCalendarId = terminalOrder.body.calendarEntry.id as string;
+    await pool.query(
+      "UPDATE qleanfeel.calendar_entries SET status = 'completed' WHERE id = $1",
+      [terminalCalendarId],
+    );
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${terminalCleaningId}/reschedule`)
+      .set(ownerAuth)
+      .send({
+        schedule,
+        expectedCleaningVersion: 1,
+        expectedCalendarEntryVersion: 1,
+      })
+      .expect(409);
+  });
+});
+
+test('Cleaning scheduling and execution serialize against each other in PostgreSQL', async () => {
+  await withOrderApplication(async ({ app, pool, bootstrap }) => {
+    const owner = await bootstrap('cleaning-scheduling-race-owner');
+    const authorization = { Authorization: `Bearer ${owner.accessToken}` };
+    const createOrder = async (schedule?: {
+      startAt: string;
+      endAt: string;
+    }) => {
+      const response = await request(app.getHttpServer())
+        .post('/v1/me/orders')
+        .set(authorization)
+        .send({ ...validRequest(), ...(schedule ? { schedule } : {}) })
+        .expect(201);
+      return response.body.initialCleaning as {
+        id: string;
+        calendarEntryId: string | null;
+        version: number;
+      };
+    };
+
+    const unscheduled = await createOrder();
+    const firstRace = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${unscheduled.id}/schedule`)
+        .set(authorization)
+        .send({
+          schedule: {
+            startAt: '2026-10-18T10:00:00.000Z',
+            endAt: '2026-10-18T11:00:00.000Z',
+          },
+          expectedCleaningVersion: 1,
+        }),
+      request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${unscheduled.id}/start`)
+        .set(authorization),
+    ]);
+    assert.ok(
+      firstRace.every(response => [200, 409].includes(response.status)),
+    );
+    assert.ok(firstRace.some(response => response.status === 200));
+    const firstState = await pool.query<{
+      status: string;
+      calendar_entry_id: string | null;
+      version: number;
+      started_at: Date | null;
+      event_count: string;
+    }>(
+      `SELECT c.status, c.calendar_entry_id, c.version, c.started_at,
+              (SELECT count(*)::text FROM qleanfeel.cleaning_lifecycle_events e
+               WHERE e.cleaning_id = c.id) AS event_count
+       FROM qleanfeel.cleanings c WHERE c.id = $1`,
+      [unscheduled.id],
+    );
+    const initialResult = firstState.rows[0];
+    assert.ok(initialResult);
+    if (initialResult.status === 'in_progress') {
+      assert.ok(initialResult.started_at);
+      assert.ok([2, 3].includes(initialResult.version));
+      assert.equal(initialResult.event_count, '1');
+    } else {
+      assert.equal(initialResult.status, 'planned');
+      assert.ok(initialResult.calendar_entry_id);
+      assert.equal(initialResult.version, 2);
+      assert.equal(initialResult.event_count, '0');
+    }
+
+    const scheduled = await createOrder({
+      startAt: '2026-10-19T10:00:00.000Z',
+      endAt: '2026-10-19T11:00:00.000Z',
+    });
+    assert.ok(scheduled.calendarEntryId);
+    const secondRace = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${scheduled.id}/reschedule`)
+        .set(authorization)
+        .send({
+          schedule: {
+            startAt: '2026-10-20T10:00:00.000Z',
+            endAt: '2026-10-20T11:00:00.000Z',
+          },
+          expectedCleaningVersion: scheduled.version,
+          expectedCalendarEntryVersion: 1,
+        }),
+      request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${scheduled.id}/start`)
+        .set(authorization),
+    ]);
+    assert.ok(
+      secondRace.every(response => [200, 409].includes(response.status)),
+    );
+    assert.ok(secondRace.some(response => response.status === 200));
+    const secondState = await pool.query<{
+      status: string;
+      calendar_entry_id: string | null;
+      cleaning_version: number;
+      entry_version: number;
+      entry_status: string;
+      event_count: string;
+    }>(
+      `SELECT c.status, c.calendar_entry_id,
+              c.version AS cleaning_version, e.version AS entry_version,
+              e.status AS entry_status,
+              (SELECT count(*)::text FROM qleanfeel.cleaning_lifecycle_events ev
+               WHERE ev.cleaning_id = c.id) AS event_count
+       FROM qleanfeel.cleanings c
+       JOIN qleanfeel.calendar_entries e ON e.id = c.calendar_entry_id
+       WHERE c.id = $1`,
+      [scheduled.id],
+    );
+    const finalState = secondState.rows[0];
+    assert.ok(finalState);
+    assert.equal(finalState.calendar_entry_id, scheduled.calendarEntryId);
+    assert.equal(finalState.entry_status, 'scheduled');
+    assert.ok([1, 2].includes(finalState.entry_version));
+    if (finalState.status === 'in_progress') {
+      assert.equal(finalState.cleaning_version, 2);
+      assert.equal(finalState.event_count, '1');
+    } else {
+      assert.equal(finalState.status, 'planned');
+      assert.equal(finalState.cleaning_version, scheduled.version);
+      assert.equal(finalState.entry_version, 2);
+      assert.equal(finalState.event_count, '0');
+    }
+  });
+});
+
+test('Cleaning schedule and reschedule writes roll back atomically on persistence failure', async () => {
+  await withOrderApplication(async ({ app, pool, bootstrap }) => {
+    const owner = await bootstrap('cleaning-schedule-rollback');
+    const authorization = { Authorization: `Bearer ${owner.accessToken}` };
+    const createCleaning = async () => {
+      const created = await request(app.getHttpServer())
+        .post('/v1/me/orders')
+        .set(authorization)
+        .send(validRequest())
+        .expect(201);
+      return created.body.initialCleaning.id as string;
+    };
+    const schedule = {
+      startAt: '2026-10-16T10:00:00.000Z',
+      endAt: '2026-10-16T11:00:00.000Z',
+    };
+
+    await pool.query(`CREATE OR REPLACE FUNCTION qleanfeel.reject_test_cleaning_schedule()
+      RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+        RAISE EXCEPTION 'forced cleaning schedule failure';
+      END $$`);
+    await pool.query(`CREATE TRIGGER reject_test_cleaning_schedule
+      BEFORE UPDATE ON qleanfeel.cleanings
+      FOR EACH ROW EXECUTE FUNCTION qleanfeel.reject_test_cleaning_schedule()`);
+    const unscheduledId = await createCleaning();
+    try {
+      await request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${unscheduledId}/schedule`)
+        .set(authorization)
+        .send({ schedule, expectedCleaningVersion: 1 })
+        .expect(500);
+    } finally {
+      await pool.query(
+        'DROP TRIGGER IF EXISTS reject_test_cleaning_schedule ON qleanfeel.cleanings',
+      );
+      await pool.query(
+        'DROP FUNCTION IF EXISTS qleanfeel.reject_test_cleaning_schedule()',
+      );
+    }
+    const scheduleRollback = await pool.query<{
+      calendar_entry_id: string | null;
+      version: number;
+      entry_count: string;
+    }>(
+      `SELECT c.calendar_entry_id, c.version,
+              (SELECT count(*)::text FROM qleanfeel.calendar_entries e
+               WHERE e.owner_user_id = $2 AND e.start_at = $3) AS entry_count
+       FROM qleanfeel.cleanings c WHERE c.id = $1`,
+      [unscheduledId, owner.userId, schedule.startAt],
+    );
+    assert.equal(scheduleRollback.rows[0]?.calendar_entry_id, null);
+    assert.equal(scheduleRollback.rows[0]?.version, 1);
+    assert.equal(scheduleRollback.rows[0]?.entry_count, '0');
+
+    const rescheduleId = await createCleaning();
+    const scheduled = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${rescheduleId}/schedule`)
+      .set(authorization)
+      .send({ schedule, expectedCleaningVersion: 1 })
+      .expect(200);
+    const entryId = scheduled.body.calendarEntryId as string;
+    await pool.query(`CREATE OR REPLACE FUNCTION qleanfeel.reject_test_calendar_reschedule()
+      RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+        RAISE EXCEPTION 'forced calendar reschedule failure';
+      END $$`);
+    await pool.query(`CREATE TRIGGER reject_test_calendar_reschedule
+      BEFORE UPDATE ON qleanfeel.calendar_entries
+      FOR EACH ROW EXECUTE FUNCTION qleanfeel.reject_test_calendar_reschedule()`);
+    try {
+      await request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${rescheduleId}/reschedule`)
+        .set(authorization)
+        .send({
+          schedule: {
+            startAt: '2026-10-17T10:00:00.000Z',
+            endAt: '2026-10-17T11:00:00.000Z',
+          },
+          expectedCleaningVersion: 2,
+          expectedCalendarEntryVersion: 1,
+        })
+        .expect(500);
+    } finally {
+      await pool.query(
+        'DROP TRIGGER IF EXISTS reject_test_calendar_reschedule ON qleanfeel.calendar_entries',
+      );
+      await pool.query(
+        'DROP FUNCTION IF EXISTS qleanfeel.reject_test_calendar_reschedule()',
+      );
+    }
+    const rescheduleRollback = await pool.query<{
+      calendar_entry_id: string;
+      cleaning_version: number;
+      entry_version: number;
+      start_at: Date;
+    }>(
+      `SELECT c.calendar_entry_id, c.version AS cleaning_version,
+              e.version AS entry_version, e.start_at
+       FROM qleanfeel.cleanings c
+       JOIN qleanfeel.calendar_entries e ON e.id = c.calendar_entry_id
+       WHERE c.id = $1`,
+      [rescheduleId],
+    );
+    assert.equal(rescheduleRollback.rows[0]?.calendar_entry_id, entryId);
+    assert.equal(rescheduleRollback.rows[0]?.cleaning_version, 2);
+    assert.equal(rescheduleRollback.rows[0]?.entry_version, 1);
+    assert.equal(
+      rescheduleRollback.rows[0]?.start_at.toISOString(),
+      schedule.startAt,
+    );
+  });
+});
+
 test('Cleaning lifecycle update and event roll back together when event append fails', async () => {
   await withOrderApplication(async ({ app, pool, bootstrap }) => {
     const owner = await bootstrap('cleaning-lifecycle-rollback');

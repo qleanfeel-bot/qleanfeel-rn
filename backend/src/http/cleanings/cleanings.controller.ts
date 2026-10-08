@@ -16,21 +16,30 @@ import type { AuthenticatedPrincipal } from '../../application/identity/authenti
 import { CancelCleaning } from '../../application/cleanings/cancel-cleaning.js';
 import {
   CleaningNotFoundError,
+  CleaningSchedulingConflictError,
   CleaningVersionConflictError,
 } from '../../application/cleanings/cleaning-lifecycle-errors.js';
 import { CompleteCleaning } from '../../application/cleanings/complete-cleaning.js';
 import { GetMyCleaning } from '../../application/cleanings/get-my-cleaning.js';
 import { GetMyCleaningLifecycle } from '../../application/cleanings/get-my-cleaning-lifecycle.js';
+import { ScheduleCleaning } from '../../application/cleanings/schedule-cleaning.js';
+import { RescheduleCleaning } from '../../application/cleanings/reschedule-cleaning.js';
 import { MarkCleaningNotPerformed } from '../../application/cleanings/mark-cleaning-not-performed.js';
 import { PartiallyCompleteCleaning } from '../../application/cleanings/partially-complete-cleaning.js';
 import { StartCleaning } from '../../application/cleanings/start-cleaning.js';
+import { InvalidCalendarScheduleError } from '../../domain/calendar/calendar-entry.js';
 import {
   InvalidCleaningError,
+  InvalidCleaningSchedulingError,
   InvalidCleaningTransitionError,
 } from '../../domain/cleanings/cleaning.js';
 import { CurrentAuthenticatedPrincipal } from '../auth/authenticated-principal.decorator.js';
 import { QleanfeelAccessGuard } from '../auth/qleanfeel-access.guard.js';
 import { assertEmptyCleaningCommandBody } from './cleaning-command.dto.js';
+import {
+  readRescheduleCleaningInput,
+  readScheduleCleaningInput,
+} from './cleaning-scheduling.dto.js';
 
 interface CleaningCommand {
   execute(
@@ -65,6 +74,10 @@ export class CleaningsController {
     private readonly getMyCleaning: GetMyCleaning,
     @Inject(GetMyCleaningLifecycle)
     private readonly getMyCleaningLifecycle: GetMyCleaningLifecycle,
+    @Inject(ScheduleCleaning)
+    private readonly scheduleCleaning: ScheduleCleaning,
+    @Inject(RescheduleCleaning)
+    private readonly rescheduleCleaning: RescheduleCleaning,
   ) {}
 
   @Get(':id')
@@ -102,6 +115,44 @@ export class CleaningsController {
       };
     } catch (error) {
       this.mapNotFound(error);
+      throw error;
+    }
+  }
+
+  @Post(':id/schedule')
+  @HttpCode(HttpStatus.OK)
+  async schedule(
+    @CurrentAuthenticatedPrincipal() principal: AuthenticatedPrincipal,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    this.assertCleaningId(id);
+    const input = readScheduleCleaningInput(body);
+    try {
+      return mapCleaning(
+        await this.scheduleCleaning.execute(principal, id, input),
+      );
+    } catch (error) {
+      this.mapCleaningCommandError(error);
+      throw error;
+    }
+  }
+
+  @Post(':id/reschedule')
+  @HttpCode(HttpStatus.OK)
+  async reschedule(
+    @CurrentAuthenticatedPrincipal() principal: AuthenticatedPrincipal,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    this.assertCleaningId(id);
+    const input = readRescheduleCleaningInput(body);
+    try {
+      return mapCleaning(
+        await this.rescheduleCleaning.execute(principal, id, input),
+      );
+    } catch (error) {
+      this.mapCleaningCommandError(error);
       throw error;
     }
   }
@@ -168,18 +219,7 @@ export class CleaningsController {
       const cleaning = await command.execute(principal, id);
       return mapCleaning(cleaning);
     } catch (error) {
-      this.mapNotFound(error);
-      if (
-        error instanceof InvalidCleaningTransitionError ||
-        error instanceof CleaningVersionConflictError
-      ) {
-        throw new ConflictException(
-          'The Cleaning changed or cannot use that transition.',
-        );
-      }
-      if (error instanceof InvalidCleaningError) {
-        throw new BadRequestException('The Cleaning command is invalid.');
-      }
+      this.mapCleaningCommandError(error);
       throw error;
     }
   }
@@ -193,6 +233,28 @@ export class CleaningsController {
   private mapNotFound(error: unknown): void {
     if (error instanceof CleaningNotFoundError) {
       throw new NotFoundException('Cleaning was not found.');
+    }
+  }
+
+  private mapCleaningCommandError(error: unknown): void {
+    this.mapNotFound(error);
+    if (
+      error instanceof InvalidCleaningTransitionError ||
+      error instanceof CleaningVersionConflictError ||
+      error instanceof CleaningSchedulingConflictError
+    ) {
+      throw new ConflictException(
+        'The Cleaning changed or cannot use that operation.',
+      );
+    }
+    if (error instanceof InvalidCalendarScheduleError) {
+      throw new BadRequestException('The schedule interval is invalid.');
+    }
+    if (
+      error instanceof InvalidCleaningError ||
+      error instanceof InvalidCleaningSchedulingError
+    ) {
+      throw new BadRequestException('The Cleaning command is invalid.');
     }
   }
 }

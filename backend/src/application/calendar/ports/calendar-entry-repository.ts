@@ -6,4 +6,15 @@ export abstract class CalendarEntryRepository {
     entry: CalendarEntry,
     context: UnitOfWorkContext,
   ): Promise<void>;
+
+  abstract findForUpdate(
+    entryId: string,
+    context: UnitOfWorkContext,
+  ): Promise<CalendarEntry | undefined>;
+
+  abstract updateSchedule(
+    entry: CalendarEntry,
+    expectedVersion: number,
+    context: UnitOfWorkContext,
+  ): Promise<boolean>;
 }

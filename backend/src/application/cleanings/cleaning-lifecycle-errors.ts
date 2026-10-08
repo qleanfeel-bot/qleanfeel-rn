@@ -11,3 +11,10 @@ export class CleaningVersionConflictError extends Error {
     this.name = 'CleaningVersionConflictError';
   }
 }
+
+export class CleaningSchedulingConflictError extends Error {
+  constructor() {
+    super('Cleaning cannot be scheduled in its current state.');
+    this.name = 'CleaningSchedulingConflictError';
+  }
+}

@@ -120,6 +120,30 @@ export class Cleaning {
     );
   }
 
+  scheduleWithCalendarEntry(calendarEntryId: string, at: Date): Cleaning {
+    if (
+      this.status !== CLEANING_STATUSES.PLANNED ||
+      this.calendarEntryId !== null ||
+      !calendarEntryId.trim() ||
+      !isValidDate(at) ||
+      at < this.updatedAt ||
+      this.version >= 2_147_483_647
+    ) {
+      throw new InvalidCleaningSchedulingError();
+    }
+    return new Cleaning(
+      this.id,
+      this.orderId,
+      calendarEntryId,
+      this.status,
+      this.startedAt,
+      this.completedAt,
+      this.createdAt,
+      new Date(at),
+      this.version + 1,
+    );
+  }
+
   start(at: Date): Cleaning {
     this.assertTransition(CLEANING_STATUSES.IN_PROGRESS, at);
     if (this.status !== CLEANING_STATUSES.PLANNED) {
@@ -237,6 +261,13 @@ export class InvalidCleaningTransitionError extends Error {
       `Cleaning cannot transition from ${currentStatus} to ${requestedStatus}.`,
     );
     this.name = 'InvalidCleaningTransitionError';
+  }
+}
+
+export class InvalidCleaningSchedulingError extends Error {
+  constructor() {
+    super('Cleaning cannot be scheduled in its current state.');
+    this.name = 'InvalidCleaningSchedulingError';
   }
 }
 

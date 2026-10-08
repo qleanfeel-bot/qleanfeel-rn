@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { UnitOfWorkContext } from '../../application/ports/unit-of-work.js';
 import { CalendarEntryRepository } from '../../application/calendar/ports/calendar-entry-repository.js';
@@ -8,7 +8,7 @@ import {
   OrderRepository,
   OrderTermsRepository,
 } from '../../application/orders/ports/order-repositories.js';
-import type { CalendarEntry } from '../../domain/calendar/calendar-entry.js';
+import { CalendarEntry } from '../../domain/calendar/calendar-entry.js';
 import type { Cleaning } from '../../domain/cleanings/cleaning.js';
 import type { OrderTerms } from '../../domain/orders/order-terms.js';
 import type { Order } from '../../domain/orders/order.js';
@@ -115,6 +115,55 @@ export class PostgresOrderRepositories
         'The initial Cleaning could not be associated with its CalendarEntry.',
       );
     }
+  }
+
+  async findForUpdate(
+    entryId: string,
+    context: UnitOfWorkContext,
+  ): Promise<CalendarEntry | undefined> {
+    const [row] = await this.transaction(context)
+      .select()
+      .from(calendarEntries)
+      .where(eq(calendarEntries.id, entryId))
+      .limit(1)
+      .for('update');
+    if (!row) return undefined;
+    return CalendarEntry.reconstitute({
+      id: row.id,
+      ownerUserId: row.ownerUserId,
+      startAt: row.startAt.toISOString(),
+      endAt: row.endAt.toISOString(),
+      type: row.type as CalendarEntry['type'],
+      status: row.status as CalendarEntry['status'],
+      title: row.title,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
+    });
+  }
+
+  async updateSchedule(
+    entry: CalendarEntry,
+    expectedVersion: number,
+    context: UnitOfWorkContext,
+  ): Promise<boolean> {
+    const rows = await this.transaction(context)
+      .update(calendarEntries)
+      .set({
+        startAt: new Date(entry.startAt),
+        endAt: new Date(entry.endAt),
+        updatedAt: entry.updatedAt,
+        version: entry.version,
+      })
+      .where(
+        and(
+          eq(calendarEntries.id, entry.id),
+          eq(calendarEntries.status, 'scheduled'),
+          eq(calendarEntries.version, expectedVersion),
+        ),
+      )
+      .returning({ id: calendarEntries.id });
+    return rows.length === 1;
   }
 
   private transaction(context: UnitOfWorkContext): DrizzleTransaction {
