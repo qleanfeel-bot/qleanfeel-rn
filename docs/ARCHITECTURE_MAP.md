@@ -255,7 +255,7 @@ sequenceDiagram
   Client->>API: POST /v1/auth/bootstrap with Firebase identity proof
   API->>Firebase: Verify identity proof
   Firebase-->>API: Normalized provider and subject
-  API->>DB: Resolve User/AuthIdentity; create AuthSession and refresh-token hash
+  API->>DB: Resolve User/AuthIdentity and create AuthSession and refresh-token hash
   API-->>Client: Qleanfeel access and refresh credentials
   Client->>API: Protected request with Qleanfeel access credential
   API->>DB: Validate current User and AuthSession
