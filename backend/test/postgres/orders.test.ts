@@ -99,6 +99,16 @@ async function deleteOrderTestUser(pool: Pool, subject: string) {
   const userIds = rows.map(row => row.id);
   if (!userIds.length) return;
   await pool.query(
+    `DELETE FROM qleanfeel.cleaning_lifecycle_events
+     WHERE actor_user_id = ANY($1::uuid[])
+        OR cleaning_id IN (
+          SELECT c.id FROM qleanfeel.cleanings c
+          JOIN qleanfeel.orders o ON o.id = c.order_id
+          WHERE o.created_by_user_id = ANY($1::uuid[])
+        )`,
+    [userIds],
+  );
+  await pool.query(
     `DELETE FROM qleanfeel.cleanings
      WHERE order_id IN (SELECT id FROM qleanfeel.orders WHERE created_by_user_id = ANY($1::uuid[]))`,
     [userIds],
@@ -531,5 +541,260 @@ test('production order read endpoints enforce ownership and return deterministic
       .set({ Authorization: `Bearer ${emptyUser.accessToken}` })
       .expect(200);
     assert.deepEqual(empty.body, { items: [], nextCursor: null });
+  });
+});
+
+test('Cleaning lifecycle commands persist execution state without changing Order or Calendar state', async () => {
+  await withOrderApplication(async ({ app, pool, bootstrap }) => {
+    const owner = await bootstrap('cleaning-lifecycle-owner');
+    const other = await bootstrap('cleaning-lifecycle-other');
+    const ownerAuth = { Authorization: `Bearer ${owner.accessToken}` };
+    const otherAuth = { Authorization: `Bearer ${other.accessToken}` };
+
+    const createCleaning = async (schedule?: {
+      startAt: string;
+      endAt: string;
+    }) => {
+      const response = await request(app.getHttpServer())
+        .post('/v1/me/orders')
+        .set(ownerAuth)
+        .send({
+          ...validRequest(),
+          ...(schedule ? { schedule } : {}),
+        })
+        .expect(201);
+      return {
+        orderId: response.body.order.id as string,
+        cleaningId: response.body.initialCleaning.id as string,
+        calendarEntryId: response.body.calendarEntry?.id as string | undefined,
+      };
+    };
+
+    const completed = await createCleaning({
+      startAt: '2026-10-09T10:00:00.000Z',
+      endAt: '2026-10-09T11:00:00.000Z',
+    });
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${completed.cleaningId}/start`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${completed.cleaningId}/start`)
+      .set(otherAuth)
+      .expect(404);
+    const suspended = await bootstrap('cleaning-lifecycle-suspended');
+    await pool.query(
+      "UPDATE qleanfeel.users SET status = 'suspended' WHERE id = $1",
+      [suspended.userId],
+    );
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${completed.cleaningId}/start`)
+      .set({ Authorization: `Bearer ${suspended.accessToken}` })
+      .expect(403);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${randomUUID()}/start`)
+      .set(ownerAuth)
+      .expect(404);
+    await request(app.getHttpServer())
+      .post('/v1/me/cleanings/not-a-uuid/start')
+      .set(ownerAuth)
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${completed.cleaningId}/start`)
+      .set(ownerAuth)
+      .send({ status: 'completed' })
+      .expect(400);
+
+    const started = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${completed.cleaningId}/start`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(started.body.status, 'in_progress');
+    assert.equal(started.body.version, 2);
+    assert.ok(started.body.startedAt);
+    assert.equal(started.body.completedAt, null);
+
+    const done = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${completed.cleaningId}/complete`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(done.body.status, 'completed');
+    assert.equal(done.body.version, 3);
+    assert.ok(done.body.completedAt);
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${completed.cleaningId}/complete`)
+      .set(ownerAuth)
+      .expect(409);
+
+    const orderState = await pool.query<{
+      order_status: string;
+      calendar_status: string;
+    }>(
+      `SELECT o.status AS order_status, e.status AS calendar_status
+       FROM qleanfeel.orders o
+       JOIN qleanfeel.cleanings c ON c.order_id = o.id
+       JOIN qleanfeel.calendar_entries e ON e.id = c.calendar_entry_id
+       WHERE c.id = $1`,
+      [completed.cleaningId],
+    );
+    assert.equal(orderState.rows[0]?.order_status, 'confirmed');
+    assert.equal(orderState.rows[0]?.calendar_status, 'scheduled');
+
+    const cancel = await createCleaning();
+    const cancelled = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${cancel.cleaningId}/cancel`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(cancelled.body.status, 'cancelled');
+    assert.equal(cancelled.body.completedAt, null);
+
+    const notPerformed = await createCleaning();
+    const notPerformedResponse = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${notPerformed.cleaningId}/not-performed`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(notPerformedResponse.body.status, 'not_performed');
+    assert.equal(notPerformedResponse.body.startedAt, null);
+    assert.ok(notPerformedResponse.body.completedAt);
+
+    const partial = await createCleaning();
+    await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${partial.cleaningId}/start`)
+      .set(ownerAuth)
+      .expect(200);
+    const partialResponse = await request(app.getHttpServer())
+      .post(`/v1/me/cleanings/${partial.cleaningId}/partially-complete`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(partialResponse.body.status, 'partially_completed');
+    assert.ok(partialResponse.body.startedAt);
+    assert.ok(partialResponse.body.completedAt);
+
+    const events = await pool.query<{
+      event_type: string;
+      version: number;
+      actor_user_id: string;
+    }>(
+      `SELECT event_type, version, actor_user_id
+       FROM qleanfeel.cleaning_lifecycle_events
+       WHERE cleaning_id = $1 ORDER BY version`,
+      [completed.cleaningId],
+    );
+    assert.deepEqual(
+      events.rows.map(event => [event.event_type, event.version]),
+      [
+        ['started', 2],
+        ['completed', 3],
+      ],
+    );
+    assert.equal(events.rows[0]?.actor_user_id, owner.userId);
+
+    const orderRead = await request(app.getHttpServer())
+      .get(`/v1/me/orders/${completed.orderId}`)
+      .set(ownerAuth)
+      .expect(200);
+    assert.equal(orderRead.body.cleanings[0]?.status, 'completed');
+    assert.equal(
+      orderRead.body.cleanings[0]?.completedAt,
+      done.body.completedAt,
+    );
+  });
+});
+
+test('Cleaning lifecycle update and event roll back together when event append fails', async () => {
+  await withOrderApplication(async ({ app, pool, bootstrap }) => {
+    const owner = await bootstrap('cleaning-lifecycle-rollback');
+    const created = await request(app.getHttpServer())
+      .post('/v1/me/orders')
+      .set({ Authorization: `Bearer ${owner.accessToken}` })
+      .send(validRequest())
+      .expect(201);
+    const cleaningId = created.body.initialCleaning.id as string;
+    await pool.query(
+      'DROP TRIGGER IF EXISTS reject_test_cleaning_lifecycle_event ON qleanfeel.cleaning_lifecycle_events',
+    );
+    await pool.query(
+      'DROP FUNCTION IF EXISTS qleanfeel.reject_test_cleaning_lifecycle_event()',
+    );
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION qleanfeel.reject_test_cleaning_lifecycle_event()
+      RETURNS trigger LANGUAGE plpgsql AS $body$
+      BEGIN
+        IF NEW.actor_user_id = '${owner.userId}'::uuid THEN
+          RAISE EXCEPTION 'forced Cleaning lifecycle event failure';
+        END IF;
+        RETURN NEW;
+      END
+      $body$`);
+    await pool.query(`
+      CREATE TRIGGER reject_test_cleaning_lifecycle_event
+      BEFORE INSERT ON qleanfeel.cleaning_lifecycle_events
+      FOR EACH ROW EXECUTE FUNCTION qleanfeel.reject_test_cleaning_lifecycle_event()`);
+    try {
+      await request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${cleaningId}/start`)
+        .set({ Authorization: `Bearer ${owner.accessToken}` })
+        .expect(500);
+    } finally {
+      await pool.query(
+        'DROP TRIGGER IF EXISTS reject_test_cleaning_lifecycle_event ON qleanfeel.cleaning_lifecycle_events',
+      );
+      await pool.query(
+        'DROP FUNCTION IF EXISTS qleanfeel.reject_test_cleaning_lifecycle_event()',
+      );
+    }
+
+    const state = await pool.query<{
+      status: string;
+      version: number;
+      started_at: Date | null;
+      event_count: string;
+    }>(
+      `SELECT c.status, c.version, c.started_at,
+         (SELECT count(*)::text FROM qleanfeel.cleaning_lifecycle_events e
+          WHERE e.cleaning_id = c.id) AS event_count
+       FROM qleanfeel.cleanings c WHERE c.id = $1`,
+      [cleaningId],
+    );
+    assert.deepEqual(state.rows[0], {
+      status: 'planned',
+      version: 1,
+      started_at: null,
+      event_count: '0',
+    });
+  });
+});
+
+test('concurrent Cleaning starts allow one versioned transition and one conflict', async () => {
+  await withOrderApplication(async ({ app, pool, bootstrap }) => {
+    const owner = await bootstrap('cleaning-lifecycle-concurrent');
+    const created = await request(app.getHttpServer())
+      .post('/v1/me/orders')
+      .set({ Authorization: `Bearer ${owner.accessToken}` })
+      .send(validRequest())
+      .expect(201);
+    const cleaningId = created.body.initialCleaning.id as string;
+    const authorization = { Authorization: `Bearer ${owner.accessToken}` };
+    const start = () =>
+      request(app.getHttpServer())
+        .post(`/v1/me/cleanings/${cleaningId}/start`)
+        .set(authorization);
+    const results = await Promise.all([start(), start()]);
+    assert.deepEqual(results.map(result => result.status).sort(), [200, 409]);
+    const persisted = await pool.query<{
+      status: string;
+      version: number;
+      event_count: string;
+    }>(
+      `SELECT c.status, c.version,
+         (SELECT count(*)::text FROM qleanfeel.cleaning_lifecycle_events e
+          WHERE e.cleaning_id = c.id) AS event_count
+       FROM qleanfeel.cleanings c WHERE c.id = $1`,
+      [cleaningId],
+    );
+    assert.deepEqual(persisted.rows[0], {
+      status: 'in_progress',
+      version: 2,
+      event_count: '1',
+    });
   });
 });

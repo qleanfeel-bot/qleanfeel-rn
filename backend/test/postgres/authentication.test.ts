@@ -151,6 +151,7 @@ test('application migrations create the approved tables and enforce relational c
       'auth_identities',
       'auth_sessions',
       'calendar_entries',
+      'cleaning_lifecycle_events',
       'cleanings',
       'order_terms',
       'orders',
