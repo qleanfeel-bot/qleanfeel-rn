@@ -2,7 +2,7 @@
 
 ## Result
 
-**Status: PASS WITH LIMITATIONS.** `react-native-keychain` 10.0.0 was added as the only direct dependency change. React Native CLI configuration discovers its Android native module, and the JavaScript harness passes unit tests, lint, and typecheck. The Android build did not reach compilation because the host ran out of disk space while Gradle configured `:react-native-keychain`. No Android emulator or device was connected, so no native storage operation, process-restart persistence, or uninstall/reinstall behavior has been verified. This evidence is insufficient by itself to approve the library for production session storage.
+**Status: PASS WITH LIMITATIONS.** `react-native-keychain` 10.0.0 was added as the only direct dependency change. React Native CLI discovered its Android native module; unit tests, lint, typecheck, formatting, and PR CI passed. The CI Android APK build passed with the project's New Architecture configuration. On 2026-10-09, the development harness also passed native write/read/replace/delete and process-restart checks on one Android 13 (API 33) device. The result supports using Keychain for the M8-B secure-storage implementation on this tested configuration. It does not establish behavior across all Android versions/devices or uninstall/reinstall behavior, and the local Gradle build remains unverified because that attempt ran out of disk space.
 
 ## Configuration examined
 
@@ -18,7 +18,7 @@ The test in `src/development/keychain/__tests__/KeychainSpikeScreen.test.tsx` mo
 
 ## Verification evidence
 
-Commands and results from this checkout:
+Commands and results from the initial spike checkout:
 
 | Command                                                                                                | Result                                                                                                                                                                                                                                               |
 | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -29,12 +29,27 @@ Commands and results from this checkout:
 | `npx tsc --noEmit`                                                                                     | Passed.                                                                                                                                                                                                                                              |
 | `npm run lint`                                                                                         | Passed.                                                                                                                                                                                                                                              |
 | `./gradlew assembleDebug --no-daemon` (from `android/`)                                                | Failed before compilation completed: `java.io.IOException: No space left on device` while Gradle configured `:react-native-keychain`. This is an environment-capacity failure and does not establish package build compatibility or incompatibility. |
-| `adb devices`                                                                                          | No emulator or device was connected.                                                                                                                                                                                                                 |
+| `adb devices`                                                                                          | No device was connected during the initial spike. A device was connected for the follow-up recorded below.                                                                                                                                           |
 
-Because no device was available, write/read/replace/delete against native storage, app-process restart persistence, and uninstall/reinstall behavior were not run. No runtime result should be inferred from the mocked test or CLI configuration output.
+## Physical-device runtime follow-up — 2026-10-09
+
+The test device reported model `M2101K7BL`, Android API 33. The CI artifact `qleanfeel-android-debug-apk` from [PR #18 CI run 37958058426](https://github.com/qleanfeel-bot/qleanfeel-rn/actions/runs/37958058426) was verified to come from commit `b0378df7d53c0897af444715a1bc4991a18f7c08`. Its package ID was `com.qleanfeel.app`, and its signing certificate matched the already-installed Qleanfeel app. It was installed with `adb install -r`, preserving app data; no uninstall or data clear was performed. APK SHA-256: `fdceb90c6d5aa9a80c40c3c83f1294ff31076fb869e2f7a095880f6618d2b0b8`.
+
+The debug APK initially displayed React Native's expected missing-bundle screen because debug builds load JavaScript from Metro. The running local Metro server reported `packager-status:running`; a temporary USB `adb reverse` was used while the app ran and removed afterward. No storage values or device serial were recorded.
+
+| Runtime check                                          | Result                                                                                                                                                                                                                      |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Write synthetic value and native read-back comparison  | **PASS** — harness reported write verified.                                                                                                                                                                                 |
+| Read and compare stored synthetic value                | **PASS** — harness reported read verified.                                                                                                                                                                                  |
+| Replace with a different synthetic value and read back | **PASS** — harness reported replacement verified.                                                                                                                                                                           |
+| Fully stop and relaunch the app, then check storage    | **PASS** — harness read a value matching one of its fixed synthetic test values. The harness reports presence/match but does not distinguish which fixed value; the replacement had passed immediately before the relaunch. |
+| Delete and verify absence                              | **PASS** — delete's immediate native read-back reported no value. A separate read afterward also reported no stored value.                                                                                                  |
+| Uninstall/reinstall persistence                        | **NOT RUN** — not required for this spike; the existing app installation and its data were preserved.                                                                                                                       |
+
+The harness's fixed synthetic values are used only for equality checks and never displayed or logged. No Firebase credentials, Qleanfeel tokens, or personal data were used.
 
 ## Recommendation and next evidence needed
 
-Treat version 10.0.0 as a **provisional candidate**, not yet as a verified M8-B dependency. Repeat the Android debug build in an environment with sufficient free disk, then install on an owner-controlled emulator or test device and complete the screen's synthetic-value operations and restart check. Uninstall/reinstall behavior can be checked only on that isolated test installation. If those checks pass, the spike will support the ADR-025 candidate; it does not implement or approve the wider Session Foundation.
+The CI Android build and the device-level operation/restart checks support `react-native-keychain` 10.0.0 as the secure-storage candidate for M8-B on the tested React Native/New Architecture setup and Android API 33 device. The local `assembleDebug` attempt still failed for lack of host disk space, but the PR CI APK built successfully. The result is limited to one device/API level; uninstall/reinstall persistence and broader Android compatibility were not tested. This spike does not implement or approve the wider Session Foundation.
 
 ADR-025 is unchanged. This note records the observed spike results without changing the approved architecture or asserting Firebase/session behavior.
