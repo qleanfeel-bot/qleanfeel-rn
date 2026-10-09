@@ -27,6 +27,12 @@ Reference material: [M6 Architecture Proposal](M6_ARCHITECTURE_PROPOSAL.md) and 
 
 M7-B.1 through M7-B.8 are implemented and merged to `main`. ADR-018 through ADR-024 record the production backend foundation and the implemented M7 slices; the individual ADRs remain the decision sources for their scope. This status does not imply deployment or production readiness. ADR-018 records explicit M7 selections for choices that M6 deferred. It does not rewrite the M6 historical record or change existing M1–M5 mobile contracts. In particular, the Firebase bearer-token plan recorded under ADR-008 is historical and is superseded for the protected production API by Qleanfeel-issued session credentials after bootstrap.
 
+## M8 — approved Mobile ↔ Backend Integration architecture
+
+- [ADR-025 — Mobile ↔ Backend Integration](ADR-025-mobile-backend-integration.md): approved first Android-to-PostgreSQL vertical slice, provider-independent mobile boundaries, Firebase Phone Authentication as the preferred candidate pending prerequisite verification, Session Manager, native secure refresh-token storage, authenticated Orders reads, refresh limitations, test environment, and acceptance criteria.
+
+M8 architecture is approved; implementation has not started. M8-B Session Foundation, M8-C Orders Read Integration, and M8-D End-to-End Acceptance are provisional proposed slices, not completed milestones. Reports are deferred without an assigned milestone number. ADR-025 does not claim that Firebase or VPS configuration exists.
+
 ## ADR-001 — React Native as the mobile application framework
 
 - **Status:** Accepted

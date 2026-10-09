@@ -300,6 +300,8 @@ Current client abstractions remain useful seams, but the following future integr
 
 Order, Cleaning, and Calendar mobile contracts will also need a coordinated move from M4's two-request `ManualOrder + CalendarEntry` create to one canonical production command. Existing development composition remains useful for unit/UI development but is not production persistence, authorization, or transaction behavior.
 
+The approved M8 mobile-to-backend integration architecture is now recorded in [ADR-025](ADR-025-mobile-backend-integration.md). This M7 proposal remains the historical M7 target architecture; it does not claim the M8 mobile integration is implemented or change the M7 decisions.
+
 ## 14. Explicit deferred decisions
 
 The following are intentionally not fixed by M7 architecture:

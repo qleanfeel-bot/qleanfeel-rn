@@ -17,7 +17,7 @@ flowchart LR
   Other["Finance/accounting, evidence/photos,<br/>notifications, Web3, external integrations<br/>FUTURE"]
 
   Mobile -->|"current app traffic"| DevHTTP
-  Mobile -.->|"future production integration"| Backend
+  Mobile -.->|"M8 approved target — not implemented"| Backend
   Backend -->|"persist identity and sessions"| DB
   Backend -->|"verify bootstrap proof"| Firebase
   Client -.->|"future client API"| Backend
@@ -121,6 +121,35 @@ flowchart LR
 For the create request, client-controlled business intent includes customer/service terms and an optional `schedule` containing `startAt` and `endAt`. Those are requested appointment times, not server-authored metadata. The server derives identity and security facts: `createdByUserId` from `AuthenticatedPrincipal.userId`, `origin=manual`, generated IDs, `createdAt`, `updatedAt`, event-recording timestamps, version, lifecycle status, and any assignment/ownership fact. The client cannot assert those values.
 
 The initial Cleaning assignment, if present in this slice, is derived from the same principal. No separate account role, `isCleaner` flag, or capability source is implied. The response is a canonical Order API DTO; it must not expose persistence rows or internal domain objects. Exact DTO fields remain in the B4 API implementation contract, not in this map.
+
+### Approved M8 target — not implemented
+
+The first M8 slice reads canonical Orders. Its accepted path must use the real HTTP route and PostgreSQL-backed read repository. This diagram records the approved dependency direction; it does not claim the mobile Firebase adapter, Session Manager, secure storage, or Orders integration exists.
+
+```mermaid
+flowchart LR
+  subgraph Mobile[Mobile — approved target, not implemented]
+    UI[Login and Orders UI]
+    App[Application state and Orders use case]
+    Ports[Auth and Order repository ports]
+    Adapter[Firebase adapter and Orders HTTP repository / DTO mapper]
+    Session[Session Manager]
+    SecureStore[Native SecureTokenStore]
+    HTTP[Authenticated HTTP transport]
+    UI --> App --> Ports --> Adapter --> HTTP
+    App --> Session
+    Session --> SecureStore
+    Session --> Adapter
+    Adapter --> Firebase[Firebase Authentication]
+    Session --> HTTP
+  end
+  HTTP --> API[NestJS API]
+  API --> Auth[Authentication guard and Orders application]
+  Auth --> Read[Owner-scoped Order read repository]
+  Read --> DB[(PostgreSQL)]
+```
+
+The first slice uses `{ items, nextCursor }` from `GET /v1/me/orders` and maps `Order → 0..N Cleaning → 0..1 CalendarEntry per Cleaning`. It preserves the existing first-class manual-order capability and does not use the development `/v1/me/manual-orders` contract for production reads. See [ADR-025](ADR-025-mobile-backend-integration.md) for refresh, failure, environment, and acceptance semantics.
 
 ## 4. Backend Module Map
 
@@ -300,7 +329,7 @@ sequenceDiagram
   API->>App: AuthenticatedPrincipal(userId, sessionId)
 ```
 
-This backend flow is implemented in the repository. The current mobile app still uses development authentication and is not connected to it. Firebase proves identity during bootstrap; protected API requests use Qleanfeel credentials and a server-resolved principal.
+This backend flow is implemented in the repository. The current mobile app still uses development authentication and is not connected to it. Firebase proves identity during bootstrap; protected API requests use Qleanfeel credentials and a server-resolved principal. The approved mobile session lifecycle and refresh coordination are recorded separately in [ADR-025](ADR-025-mobile-backend-integration.md); they are not yet implemented.
 
 ## 9. Cleaning Retrieval and Lifecycle Read Flow — MAIN (M7-B.7)
 
@@ -348,6 +377,7 @@ Schedule and reschedule use the existing Calendar scheduling capability and call
 | `CURRENT IN REPOSITORY` | Implemented on `main`; this does not assert deployment. |
 | `IMPLEMENTED ON MAIN` | Implemented and merged to `main`; this does not assert deployment. |
 | `PLANNED` | Approved or proposed work not implemented in the current slice. |
+| `APPROVED TARGET — NOT IMPLEMENTED` | The architecture is approved; no implementation is claimed. |
 | `FUTURE` | Not implemented in the current repository scope. |
 | Solid arrow | The call, dependency, or data flow shown; status comes from the node or containing boundary. |
 | Dashed arrow | Planned or future interaction/data flow. |
@@ -355,6 +385,6 @@ Schedule and reschedule use the existing Calendar scheduling capability and call
 | Database cylinder | Persisted state. |
 | UnitOfWork boundary | One transaction; enclosed writes commit or roll back together. |
 
-Architectural decisions remain in [ADR-011 — Calendar](ADR-011-calendar.md), [ADR-012 — ManualOrder compatibility](ADR-012-manual-orders.md), [ADR-014 — Canonical Order and work execution](ADR-014-canonical-order-and-work-execution.md), [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md), [ADR-019 — Identity and Authentication](ADR-019-identity-authentication-foundation.md), [ADR-020 — Authorization Foundation](ADR-020-authorization-foundation.md), [ADR-021 — M7-B.4 Order creation](ADR-021-canonical-order-creation-and-optional-scheduling.md), [ADR-022 — M7-B.5 Order retrieval](ADR-022-order-retrieval-read-path.md), [ADR-023 — M7-B.6 Cleaning lifecycle](ADR-023-cleaning-execution-lifecycle.md), and [ADR-024 — M7-B.8 Cleaning scheduling](ADR-024-cleaning-scheduling-and-calendar-coordination.md). The [M6 proposal](M6_ARCHITECTURE_PROPOSAL.md) and [M7 proposal](M7_ARCHITECTURE_PROPOSAL.md) provide broader context. Milestone status remains in [ROADMAP.md](ROADMAP.md).
+Architectural decisions remain in [ADR-011 — Calendar](ADR-011-calendar.md), [ADR-012 — ManualOrder compatibility](ADR-012-manual-orders.md), [ADR-014 — Canonical Order and work execution](ADR-014-canonical-order-and-work-execution.md), [ADR-018 — Production Backend Foundation](ADR-018-production-backend-foundation.md), [ADR-019 — Identity and Authentication](ADR-019-identity-authentication-foundation.md), [ADR-020 — Authorization Foundation](ADR-020-authorization-foundation.md), [ADR-021 — M7-B.4 Order creation](ADR-021-canonical-order-creation-and-optional-scheduling.md), [ADR-022 — M7-B.5 Order retrieval](ADR-022-order-retrieval-read-path.md), [ADR-023 — M7-B.6 Cleaning lifecycle](ADR-023-cleaning-execution-lifecycle.md), [ADR-024 — M7-B.8 Cleaning scheduling](ADR-024-cleaning-scheduling-and-calendar-coordination.md), and [ADR-025 — Mobile ↔ Backend Integration](ADR-025-mobile-backend-integration.md). The [M6 proposal](M6_ARCHITECTURE_PROPOSAL.md) and [M7 proposal](M7_ARCHITECTURE_PROPOSAL.md) provide broader context. Milestone status remains in [ROADMAP.md](ROADMAP.md).
 
 Update this map alongside a milestone decision when module ownership, an API boundary, persistence, or a transaction boundary changes. Keep detailed rules in ADRs and milestone progress in the roadmap; do not copy those details here.

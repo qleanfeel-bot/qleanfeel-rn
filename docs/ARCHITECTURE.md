@@ -87,9 +87,11 @@ The backend is implemented as a NestJS modular-monolith foundation under `backen
 
 These are governance principles for future work, not claims that corresponding systems already exist.
 
-## Authentication — BACKEND FOUNDATION IMPLEMENTED; MOBILE PRODUCTION INTEGRATION PLANNED
+## Authentication — BACKEND FOUNDATION IMPLEMENTED; M8 MOBILE INTEGRATION ARCHITECTURE APPROVED, IMPLEMENTATION NOT STARTED
 
 The backend has provider-independent `User`, `AuthIdentity`, `AuthSession`, and refresh-token domain concepts. Firebase Admin verifies identity proof at bootstrap and returns a normalized provider subject; the Firebase UID is not the Qleanfeel User ID. Bootstrap resolves or provisions the Qleanfeel identity and creates a session. Protected requests use Qleanfeel-issued access credentials and current server-side session/account state. See [ADR-019](ADR-019-identity-authentication-foundation.md).
+
+The approved M8 target is Firebase identity proof → Qleanfeel session → authenticated canonical Orders read → Android UI, using real HTTP and PostgreSQL-backed behavior for acceptance. The architecture requires a dedicated Session Manager, native secure refresh-token storage, and a provider-independent Orders model. Firebase Phone Authentication is the preferred candidate pending project/prerequisite verification; `react-native-keychain` is the preferred storage candidate pending compatibility verification. These are architecture decisions and candidates, not evidence that mobile integration or Firebase configuration is implemented. See [ADR-025](ADR-025-mobile-backend-integration.md).
 
 ### Mobile state and provider boundary — CONTRACTS IMPLEMENTED; APP STILL USES DEVELOPMENT COMPOSITION
 
