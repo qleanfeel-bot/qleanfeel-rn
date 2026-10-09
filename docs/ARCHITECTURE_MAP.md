@@ -1,8 +1,8 @@
 # Qleanfeel Living Architecture Map
 
-This document is a visual guide to the repository architecture. It distinguishes code currently present in `main`, M7-B.8 work on its feature branch, and later product ideas. “Current” does not claim that a component is deployed.
+This document is a visual guide to the repository architecture. It distinguishes code implemented on `main` from later product ideas. “Current” does not claim that a component is deployed.
 
-The map does not replace architectural decisions or milestone status. See [ADRs](DECISIONS.md) for decisions and [ROADMAP.md](ROADMAP.md) for milestone status. `main` contains M7-B.1–B.7; M7-B.8 is implemented on its Draft PR feature branch and is not merged.
+The map does not replace architectural decisions or milestone status. See [ADRs](DECISIONS.md) for decisions and [ROADMAP.md](ROADMAP.md) for milestone status. M7-B.1–B.8 are implemented and merged to `main`; this does not claim deployment or production readiness.
 
 ## 1. System Context
 
@@ -10,7 +10,7 @@ The map does not replace architectural decisions or milestone status. See [ADRs]
 flowchart LR
   Mobile["Mobile App<br/>CURRENT IN REPOSITORY<br/>development composition"]
   DevHTTP["Development HTTP handlers<br/>CURRENT IN REPOSITORY<br/>in-memory"]
-  Backend["Qleanfeel Backend API<br/>CURRENT IN REPOSITORY<br/>identity, Order APIs, Cleaning commands/reads — MAIN;<br/>Cleaning scheduling — M7-B.8 Draft PR"]
+  Backend["Qleanfeel Backend API<br/>IMPLEMENTED ON MAIN<br/>identity, Order APIs, Cleaning commands/reads/scheduling"]
   DB[("PostgreSQL<br/>CURRENT IN REPOSITORY<br/>identity, Order/Terms/Cleaning/Calendar;<br/>lifecycle history — MAIN")]
   Firebase["Firebase<br/>CURRENT EXTERNAL PROVIDER<br/>identity proof at bootstrap"]
   Client["Client App<br/>FUTURE"]
@@ -129,14 +129,14 @@ flowchart TB
   subgraph Http["HTTP / NestJS — CURRENT IN REPOSITORY"]
     IdentityHTTP["Identity HTTP<br/>bootstrap, refresh, logout, /me"]
     OrdersHTTP["Orders HTTP<br/>POST, GET /v1/me/orders<br/>GET /v1/me/orders/:id — main"]
-    CleaningHTTP["Cleaning HTTP<br/>lifecycle commands and reads — MAIN;<br/>schedule / reschedule — M7-B.8 Draft PR"]
+    CleaningHTTP["Cleaning HTTP<br/>lifecycle commands, reads, schedule / reschedule — MAIN"]
     Health["Health"]
   end
 
   subgraph Application["Application — CURRENT FOUNDATION"]
     IdentityUC["Identity use cases"]
     OrdersUC["CreateManualOrder / ListMyOrders / GetMyOrder — main"]
-    CleaningUC["Lifecycle commands and reads — MAIN;<br/>ScheduleCleaning / RescheduleCleaning — M7-B.8 Draft PR"]
+    CleaningUC["Lifecycle commands, reads,<br/>ScheduleCleaning / RescheduleCleaning — MAIN"]
     AuthZ["Authorization decision, denial,<br/>resource-policy boundary"]
     Ports["Repository, credential, verifier,<br/>clock, ID, UnitOfWork ports"]
   end
@@ -151,7 +151,7 @@ flowchart TB
     CredentialAdapters["Qleanfeel access / refresh adapters"]
     PostgresAdapters["PostgreSQL identity repositories<br/>and UnitOfWork"]
     BusinessAdapters["PostgreSQL Order write/read adapters — main"]
-    CleaningAdapter["PostgreSQL Cleaning lifecycle / scheduling adapter — MAIN + M7-B.8 Draft PR"]
+    CleaningAdapter["PostgreSQL Cleaning lifecycle / scheduling adapter — MAIN"]
   end
 
   DB[("PostgreSQL identity/session and<br/>Order/Cleaning/Calendar schema")]
@@ -175,7 +175,7 @@ flowchart TB
 
   Orders["Orders create command — main"]
   Cleaning["Initial Cleaning persistence — main"]
-  Calendar["Calendar scheduling port — MAIN;<br/>coordination commands — M7-B.8 Draft PR"]
+  Calendar["Calendar scheduling port and Cleaning coordination — MAIN"]
   Lifecycle["Cleaning execution lifecycle + history — MAIN"]
   Profile["Profile backend — FUTURE"]
   Orders -.-> Application
@@ -185,7 +185,7 @@ flowchart TB
   Profile -.-> Application
 ```
 
-Authorization is Application code, not a separate NestJS module. Policies do not load resources, use infrastructure, or manage transactions. M7-B.4–B.7 policies are on `main`; M7-B.8 resolves Cleaning→Order owner facts inside its UnitOfWork and evaluates them through the existing pure Cleaning policy.
+Authorization is Application code, not a separate NestJS module. Policies do not load resources, use infrastructure, or manage transactions. M7-B.4–B.8 use pure policies over resource facts resolved by application use cases; Cleaning ownership is derived through Cleaning→Order.
 
 ## 5. Business Data Model
 
@@ -317,7 +317,7 @@ flowchart TB
 
 The two endpoints are independent ordinary reads and do not open a UnitOfWork. Both conceal missing and non-owned Cleanings with `404`. State and its lifecycle history continue to be written atomically by the B.6 command transaction.
 
-## 10. Cleaning Scheduling and Calendar Coordination — M7-B.8 Draft PR
+## 10. Cleaning Scheduling and Calendar Coordination — MAIN (M7-B.8)
 
 ```mermaid
 flowchart TB
@@ -347,9 +347,8 @@ Schedule and reschedule use the existing Calendar scheduling capability and call
 | --- | --- |
 | `CURRENT IN REPOSITORY` | Implemented on `main`; this does not assert deployment. |
 | `IMPLEMENTED ON MAIN` | Implemented and merged to `main`; this does not assert deployment. |
-| `M7-B.8 DRAFT PR` | Implemented on the M7-B.8 feature branch, not yet merged to `main`. |
 | `PLANNED` | Approved or proposed work not implemented in the current slice. |
-| `FUTURE` | Outside M7-B.4–B.6 and not implemented. |
+| `FUTURE` | Not implemented in the current repository scope. |
 | Solid arrow | The call, dependency, or data flow shown; status comes from the node or containing boundary. |
 | Dashed arrow | Planned or future interaction/data flow. |
 | Subgraph | Architectural or ownership boundary. |

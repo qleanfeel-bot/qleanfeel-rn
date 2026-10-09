@@ -1,14 +1,14 @@
 # Test matrix
 
-Statuses describe the current repository unless a row is explicitly marked as future work.
+Statuses describe the current repository unless a row is explicitly marked as future work. Historical local/device results are labeled by milestone; configured CI checks and each run's pass/fail result are separate facts.
 
 ## Static checks
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| TypeScript (`npx tsc --noEmit`) | **PASSED** | Passed for the M5 implementation and documentation closure. |
-| ESLint (`npm run lint`) | **PASSED** | Passed for the M5 implementation. |
-| Documentation/code diff check (`git diff --check`) | **PASSED** | Passed after M5 documentation closure. |
+| TypeScript (`npx tsc --noEmit`) | **PASSED — M5 RECORDED RESULT** | Passed for the M5 implementation and documentation closure. Current PR/CI results are reported by the applicable run. |
+| ESLint (`npm run lint`) | **PASSED — M5 RECORDED RESULT** | Passed for the M5 implementation. Current PR/CI results are reported by the applicable run. |
+| Documentation/code diff check (`git diff --check`) | **PASSED — M5 RECORDED RESULT** | Passed after M5 documentation closure; run again for each documentation change. |
 
 ## Unit tests
 
@@ -41,7 +41,7 @@ Statuses describe the current repository unless a row is explicitly marked as fu
 | Physical iOS device verification | **PLANNED** | No iOS device verification is recorded for M1. |
 | Hardware-dependent behavior | **PLANNED** | BLE, camera, microphone, background behavior, and device-specific behavior require real Android hardware when those features are implemented. Add explicit device checks to the relevant milestone. |
 
-Real hardware is not permanently connected to the Xubuntu workstation. Hardware-dependent testing must be identified as such and must not block software-only milestones unless the feature requires hardware validation.
+Real hardware is not permanently connected to the Xubuntu workstation. The recorded physical-device flows used the development/in-memory composition and do not validate production backend integration or deployment. Hardware-dependent testing must be identified as such and must not block software-only milestones unless the feature requires hardware validation.
 
 ## M3 Android manual verification
 
@@ -83,9 +83,11 @@ The user reports that the following physical Android smoke flows passed. No addi
 11. Calendar `external_order` creation.
 12. The created `external_order` opens through OrderDetails.
 
-## M7 Backend Foundation — B.1–B.5 MERGED; B.6 IMPLEMENTED / DRAFT PR
+## M7 Backend Foundation — B.1–B.8 COMPLETE / MERGED
 
-The backend verification suite uses `node:test` through `tsx --test`. Unit/HTTP coverage includes backend configuration, identity use cases, HTTP behavior, persistence bootstrap, authorization, Order retrieval, and Cleaning lifecycle commands. PostgreSQL integration coverage is in `backend/test/postgres/` and requires the repository's `TEST_DATABASE_URL` setup. The configured [CI workflow](../.github/workflows/ci.yml) runs backend format, lint, typecheck, unit, PostgreSQL integration, and build checks.
+M7-B.1 through M7-B.8 are implemented and merged to `main`. This records repository implementation and test coverage, not deployment or production readiness. The backend unit/application/HTTP suite uses `node:test` through `tsx --test`; PostgreSQL integration tests are in `backend/test/postgres/` and require `TEST_DATABASE_URL` pointing to PostgreSQL 18. The [CI workflow](../.github/workflows/ci.yml) runs on pull requests to `main` and pushes to `main`. It installs Node 24 for backend checks, then runs format, lint, typecheck, unit tests, migrations, PostgreSQL integration tests, schema checks, and build. A separate Android job installs Node 22 and runs root TypeScript, ESLint, Jest, Android debug/release builds, and APK artifact uploads.
+
+The rows below describe coverage present in the repository and checks configured in CI; they do not themselves record a local test run or assert the result of a particular GitHub Actions run. CI results belong to the corresponding Actions run. PostgreSQL integration coverage is not substituted with mocks when a local test database is unavailable.
 
 | Test category | Status | Current coverage |
 | --- | --- | --- |
@@ -94,17 +96,23 @@ The backend verification suite uses `node:test` through `tsx --test`. Unit/HTTP 
 | PostgreSQL authentication and UnitOfWork integration tests | **IMPLEMENTED** | `backend/test/postgres/authentication.test.ts`, `unit-of-work.test.ts`, and `readiness.test.ts`; execution requires configured PostgreSQL 18. |
 | M7-B.4 CreateManualOrder tests | **IMPLEMENTED — MERGED** | `backend/test/orders.test.ts` and `backend/test/postgres/orders.test.ts` cover canonical graph creation and full rollback after Calendar persistence failure. |
 | M7-B.5 Order Retrieval tests | **IMPLEMENTED — MERGED** | `backend/test/order-reads.test.ts` covers owner-scoped application use cases, empty results, cursor continuation input, limit validation, current terms, multiple Cleanings, and optional CalendarEntry. `backend/test/postgres/orders.test.ts` covers authenticated list/detail, 401/404 concealment, owner isolation, latest terms, multiple Cleanings, optional CalendarEntry, deterministic tie-break ordering, cursor pages, invalid query and empty collection. |
-| M7-B.6 Cleaning lifecycle tests | **IMPLEMENTED IN DRAFT PR** | `backend/test/cleaning-lifecycle-domain.test.ts` covers all valid transitions, invalid transitions from terminal states, timestamp and version behavior. `backend/test/cleaning-lifecycle.test.ts` covers explicit commands, ownership policy, missing/non-owned resources, invalid transition, version conflict, and event creation. `backend/test/postgres/orders.test.ts` covers HTTP auth/ownership/error semantics, persisted timestamps/version/events, no Order/Calendar side effects, event-failure rollback, and concurrent stale starts. PostgreSQL execution requires the configured database. |
+| M7-B.6 Cleaning lifecycle tests | **COVERAGE PRESENT — MERGED** | `backend/test/cleaning-lifecycle-domain.test.ts` covers valid transitions, terminal-state rejection, timestamps, and versions. `backend/test/cleaning-lifecycle.test.ts` covers commands, ownership, missing/non-owned resources, invalid transitions, version conflicts, and event creation. `backend/test/postgres/orders.test.ts` covers authenticated HTTP behavior, persisted state/events, rollback, and concurrent starts. PostgreSQL execution is configured in CI against PostgreSQL 18. |
+| M7-B.7 Cleaning retrieval/history tests | **COVERAGE PRESENT — MERGED** | `backend/test/cleaning-reads.test.ts` covers owner policy, canonical current Cleaning state, concealed missing/non-owned resources, and separate lifecycle-history reads. PostgreSQL HTTP coverage is in `backend/test/postgres/orders.test.ts`; it verifies persisted lifecycle history and owner-scoped retrieval. |
+| M7-B.8 Cleaning scheduling tests | **COVERAGE PRESENT — MERGED** | `backend/test/cleaning-scheduling.test.ts` covers ScheduleCleaning and RescheduleCleaning use cases, ownership, state/version conflicts, intervals, and version/identity semantics. `backend/test/postgres/orders.test.ts` covers both HTTP routes, persisted relation and versions, ownership, atomic rollback, concurrent reschedule/reschedule, and schedule/reschedule versus StartCleaning. These PostgreSQL tests run through the configured CI database job. |
+| M7-B.8 local verification record | **PASSED — PRE-MERGE LOCAL RUN** | On implementation commit `8a7dfce`, backend format, lint, typecheck, build, schema check, and unit/HTTP suite passed (58 tests); root TypeScript, ESLint, Jest (30 suites / 276 tests), and Android debug/release builds passed. PostgreSQL integration tests were not run locally because `TEST_DATABASE_URL` was unavailable. |
+| Backend CI checks | **CONFIGURED IN CI** | `.github/workflows/ci.yml` runs backend `format:check`, `lint`, `typecheck`, `test`, `db:migrate`, `test:postgres`, `db:check`, and `build` with a PostgreSQL 18 service. Check outcomes are reported per Actions run. |
+| Android/RN CI checks | **CONFIGURED IN CI** | `.github/workflows/ci.yml` runs `npx tsc --noEmit`, `npm run lint`, `npm test -- --ci`, Android `assembleDebug` and `assembleRelease`, and uploads both APKs. These checks do not exercise production backend integration. |
+| M7-B.8 merge CI run | **PASSED — BEFORE MERGE** | [GitHub Actions run 37816678697](https://github.com/qleanfeel-bot/qleanfeel-rn/actions/runs/37816678697) passed for source commit `8a7dfce`; backend and Android jobs were both successful. This is CI evidence, separate from the local results above. |
 
 ## M6 Architecture — APPROVED, DESIGN ONLY
 
-The M6 architecture and Domain/Data Dictionary are design artifacts, not an M6 software implementation. M7-B.1–B.5 are merged; B.4 provides canonical Order creation and B.5 its owner-scoped read path. M7-B.6 adds Cleaning execution lifecycle and audit history on its Draft PR branch. WorkAcceptance, settlement, and Web3 remain separate future concepts and are not implemented by B.6. Later Money, tax, Dashboard, Messaging, Evidence, and settlement behavior requires tests when approved code exists.
+The M6 architecture and Domain/Data Dictionary are design artifacts, not an M6 software implementation. M7-B.1 through M7-B.8 are merged; the M7 slices implement the selected backend/auth foundation, canonical Order creation and retrieval, Cleaning lifecycle and reads, and Cleaning scheduling coordination. WorkAcceptance, settlement, and Web3 remain separate future concepts. Later Money, tax, Dashboard, Messaging, Evidence, and settlement behavior requires tests if corresponding implementation is approved.
 
 ## Future integration tests
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Production mobile-to-backend integration and business-resource end-to-end tests | **PLANNED** | The mobile app still uses its development composition; this milestone adds only the production Order create path, not a full Profile/Order/Cleaning/Calendar API. Define mobile migration coverage in a later slice. |
+| Production mobile-to-backend integration and business-resource end-to-end tests | **PLANNED** | The mobile app still uses its development/in-memory composition and is not connected to the production backend. Backend PostgreSQL tests do not validate mobile authentication, mobile API wiring, or a live production deployment. Define mobile migration coverage after separate approval. |
 
 ## Future BLE tests
 

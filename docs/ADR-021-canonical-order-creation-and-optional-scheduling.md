@@ -1,13 +1,13 @@
 # ADR-021 — Canonical Order Creation and Optional Scheduling
 
-- **Status:** Accepted architecture decision for M7-B.4; production implementation not yet started
+- **Status:** Accepted architecture decision for M7-B.4; implementation merged to `main`
 - **Date:** 2026-10-06
 - **Scope:** `CreateManualOrder`, one initial Cleaning, and optional Calendar scheduling
 - **Related:** [M6 architecture proposal](M6_ARCHITECTURE_PROPOSAL.md), [M7 architecture proposal](M7_ARCHITECTURE_PROPOSAL.md), [ADR-011](ADR-011-calendar.md), [ADR-014](ADR-014-canonical-order-and-work-execution.md), [ADR-018](ADR-018-production-backend-foundation.md), [ADR-019](ADR-019-identity-authentication-foundation.md), [ADR-020](ADR-020-authorization-foundation.md), [Architecture Map](ARCHITECTURE_MAP.md)
 
 ## Context
 
-M7-B.1 through M7-B.3 established the production backend foundation, identity/authentication, and the framework-independent authorization boundary. The backend does not yet contain production Orders, Cleaning, or Calendar business modules. The current mobile ManualOrder and Calendar path is a development composition that creates separate resources and uses best-effort compensation; it is not the production transaction model.
+At the time this decision was made, M7-B.1 through M7-B.3 had established the production backend foundation, identity/authentication, and the framework-independent authorization boundary. The mobile ManualOrder and Calendar path remains a development composition that creates separate resources and uses best-effort compensation; it is not the production transaction model. The production Orders, Cleaning, and Calendar capabilities established by M7-B.4 and later slices are separate from that mobile path.
 
 M7-B.4 establishes the first production business command, `CreateManualOrder`, without implementing a full Orders or Calendar API.
 

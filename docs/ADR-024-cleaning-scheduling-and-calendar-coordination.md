@@ -1,6 +1,6 @@
 # ADR-024 — Cleaning Scheduling and Calendar Coordination
 
-- **Status:** Accepted implementation decision for M7-B.8
+- **Status:** Accepted implementation decision; M7-B.8 implementation merged to `main`
 - **Date:** 2026-10-08
 - **Scope:** Owner-authorized scheduling and rescheduling of a Cleaning through Calendar
 - **Related:** [ADR-020](ADR-020-authorization-foundation.md), [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md), [ADR-023](ADR-023-cleaning-execution-lifecycle.md), [Architecture Map](ARCHITECTURE_MAP.md)
