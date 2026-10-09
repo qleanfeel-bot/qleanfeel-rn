@@ -9,4 +9,17 @@ export abstract class CalendarScheduleCreator {
     schedule: CalendarSchedule,
     context: UnitOfWorkContext,
   ): Promise<CalendarEntry>;
+
+  abstract createForCleaning(
+    ownerUserId: string,
+    schedule: CalendarSchedule,
+    context: UnitOfWorkContext,
+  ): Promise<CalendarEntry>;
+
+  abstract rescheduleExisting(
+    entryId: string,
+    schedule: CalendarSchedule,
+    expectedVersion: number,
+    context: UnitOfWorkContext,
+  ): Promise<CalendarEntry | undefined>;
 }

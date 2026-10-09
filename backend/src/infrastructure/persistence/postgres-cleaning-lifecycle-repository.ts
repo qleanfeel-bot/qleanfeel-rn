@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { CleaningLifecycleRepository as CleaningLifecyclePort } from '../../application/cleanings/ports/cleaning-lifecycle-repository.js';
 import type { UnitOfWorkContext } from '../../application/ports/unit-of-work.js';
@@ -21,24 +21,20 @@ export class PostgresCleaningLifecycleRepository implements CleaningLifecyclePor
   ) {}
 
   async findForLifecycle(cleaningId: string, context: UnitOfWorkContext) {
-    const [row] = await this.transaction(context)
-      .select({
-        id: cleanings.id,
-        orderId: cleanings.orderId,
-        calendarEntryId: cleanings.calendarEntryId,
-        status: cleanings.status,
-        startedAt: cleanings.startedAt,
-        completedAt: cleanings.completedAt,
-        createdAt: cleanings.createdAt,
-        updatedAt: cleanings.updatedAt,
-        version: cleanings.version,
-        orderOwnerUserId: orders.createdByUserId,
-      })
+    const transaction = this.transaction(context);
+    const [row] = await transaction
+      .select()
       .from(cleanings)
-      .innerJoin(orders, eq(cleanings.orderId, orders.id))
       .where(eq(cleanings.id, cleaningId))
-      .limit(1);
+      .limit(1)
+      .for('update');
     if (!row) return undefined;
+    const [order] = await transaction
+      .select({ ownerUserId: orders.createdByUserId })
+      .from(orders)
+      .where(eq(orders.id, row.orderId))
+      .limit(1);
+    if (!order) return undefined;
     return {
       cleaning: Cleaning.reconstitute({
         id: row.id,
@@ -51,7 +47,7 @@ export class PostgresCleaningLifecycleRepository implements CleaningLifecyclePor
         updatedAt: row.updatedAt,
         version: row.version,
       }),
-      orderOwnerUserId: row.orderOwnerUserId,
+      orderOwnerUserId: order.ownerUserId,
     };
   }
 
@@ -72,6 +68,30 @@ export class PostgresCleaningLifecycleRepository implements CleaningLifecyclePor
       .where(
         and(
           eq(cleanings.id, cleaning.id),
+          eq(cleanings.version, expectedVersion),
+        ),
+      )
+      .returning({ id: cleanings.id });
+    return rows.length === 1;
+  }
+
+  async associateScheduledCalendarEntry(
+    cleaning: Cleaning,
+    expectedVersion: number,
+    context: UnitOfWorkContext,
+  ): Promise<boolean> {
+    const rows = await this.transaction(context)
+      .update(cleanings)
+      .set({
+        calendarEntryId: cleaning.calendarEntryId,
+        updatedAt: cleaning.updatedAt,
+        version: cleaning.version,
+      })
+      .where(
+        and(
+          eq(cleanings.id, cleaning.id),
+          eq(cleanings.status, 'planned'),
+          isNull(cleanings.calendarEntryId),
           eq(cleanings.version, expectedVersion),
         ),
       )

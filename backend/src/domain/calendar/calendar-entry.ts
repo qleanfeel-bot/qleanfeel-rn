@@ -66,6 +66,71 @@ export class CalendarEntry {
       1,
     );
   }
+
+  static reconstitute(input: {
+    readonly id: string;
+    readonly ownerUserId: string;
+    readonly startAt: string;
+    readonly endAt: string;
+    readonly type: CalendarEntryType;
+    readonly status: CalendarEntryStatus;
+    readonly title: string;
+    readonly createdAt: Date;
+    readonly updatedAt: Date;
+    readonly version: number;
+  }): CalendarEntry {
+    assertValidSchedule({ startAt: input.startAt, endAt: input.endAt });
+    if (
+      !input.id.trim() ||
+      !input.ownerUserId.trim() ||
+      !Object.values(CALENDAR_ENTRY_TYPES).includes(input.type) ||
+      !Object.values(CALENDAR_ENTRY_STATUSES).includes(input.status) ||
+      !input.title.trim() ||
+      !isValidDate(input.createdAt) ||
+      !isValidDate(input.updatedAt) ||
+      input.updatedAt < input.createdAt ||
+      !Number.isSafeInteger(input.version) ||
+      input.version < 1
+    ) {
+      throw new InvalidCalendarScheduleError();
+    }
+    return new CalendarEntry(
+      input.id,
+      input.ownerUserId,
+      input.startAt,
+      input.endAt,
+      input.type,
+      input.status,
+      input.title,
+      new Date(input.createdAt),
+      new Date(input.updatedAt),
+      input.version,
+    );
+  }
+
+  reschedule(schedule: CalendarSchedule, at: Date): CalendarEntry {
+    assertValidSchedule(schedule);
+    if (
+      this.status !== CALENDAR_ENTRY_STATUSES.SCHEDULED ||
+      !isValidDate(at) ||
+      at < this.updatedAt ||
+      this.version >= 2_147_483_647
+    ) {
+      throw new InvalidCalendarEntryTransitionError();
+    }
+    return new CalendarEntry(
+      this.id,
+      this.ownerUserId,
+      schedule.startAt,
+      schedule.endAt,
+      this.type,
+      this.status,
+      this.title,
+      this.createdAt,
+      new Date(at),
+      this.version + 1,
+    );
+  }
 }
 
 export function assertValidSchedule(schedule: CalendarSchedule): void {
@@ -84,6 +149,17 @@ export class InvalidCalendarScheduleError extends Error {
     super('Calendar schedule is invalid.');
     this.name = 'InvalidCalendarScheduleError';
   }
+}
+
+export class InvalidCalendarEntryTransitionError extends Error {
+  constructor() {
+    super('Calendar entry cannot be rescheduled in its current state.');
+    this.name = 'InvalidCalendarEntryTransitionError';
+  }
+}
+
+function isValidDate(value: Date): boolean {
+  return value instanceof Date && Number.isFinite(value.getTime());
 }
 
 function compareUtcInstants(left: string, right: string): number {

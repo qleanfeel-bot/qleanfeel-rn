@@ -15,6 +15,10 @@ import { CleaningLifecycleRepository } from '../../application/cleanings/ports/c
 import { MarkCleaningNotPerformed } from '../../application/cleanings/mark-cleaning-not-performed.js';
 import { PartiallyCompleteCleaning } from '../../application/cleanings/partially-complete-cleaning.js';
 import { StartCleaning } from '../../application/cleanings/start-cleaning.js';
+import { ScheduleCleaning } from '../../application/cleanings/schedule-cleaning.js';
+import { RescheduleCleaning } from '../../application/cleanings/reschedule-cleaning.js';
+import { CalendarScheduleCreator } from '../../application/calendar/ports/calendar-schedule-creator.js';
+import { OrdersModule } from '../orders/orders.module.js';
 import { DatabaseModule } from '../persistence/database.module.js';
 import { PostgresCleaningLifecycleRepository } from '../persistence/postgres-cleaning-lifecycle-repository.js';
 import { PostgresCleaningReadRepository } from '../persistence/postgres-cleaning-read-repository.js';
@@ -82,8 +86,35 @@ const getMyCleaningLifecycleProvider: Provider = {
   ) => new GetMyCleaningLifecycle(repository, policy),
 };
 
+const scheduleCleaningProvider: Provider = {
+  provide: ScheduleCleaning,
+  inject: [
+    UnitOfWork,
+    CleaningLifecycleRepository,
+    CalendarScheduleCreator,
+    CleaningLifecyclePolicy,
+    Clock,
+  ],
+  useFactory: (
+    ...dependencies: ConstructorParameters<typeof ScheduleCleaning>
+  ) => new ScheduleCleaning(...dependencies),
+};
+
+const rescheduleCleaningProvider: Provider = {
+  provide: RescheduleCleaning,
+  inject: [
+    UnitOfWork,
+    CleaningLifecycleRepository,
+    CalendarScheduleCreator,
+    CleaningLifecyclePolicy,
+  ],
+  useFactory: (
+    ...dependencies: ConstructorParameters<typeof RescheduleCleaning>
+  ) => new RescheduleCleaning(...dependencies),
+};
+
 @Module({
-  imports: [DatabaseModule, IdentityModule],
+  imports: [DatabaseModule, IdentityModule, OrdersModule],
   providers: [
     PostgresCleaningLifecycleRepository,
     PostgresCleaningReadRepository,
@@ -106,6 +137,8 @@ const getMyCleaningLifecycleProvider: Provider = {
     CleaningReadPolicy,
     getMyCleaningProvider,
     getMyCleaningLifecycleProvider,
+    scheduleCleaningProvider,
+    rescheduleCleaningProvider,
   ],
   exports: [
     StartCleaning,
@@ -115,6 +148,8 @@ const getMyCleaningLifecycleProvider: Provider = {
     MarkCleaningNotPerformed,
     GetMyCleaning,
     GetMyCleaningLifecycle,
+    ScheduleCleaning,
+    RescheduleCleaning,
   ],
 })
 export class CleaningLifecycleModule {}
