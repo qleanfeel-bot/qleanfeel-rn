@@ -15,13 +15,17 @@ This roadmap separates the implemented foundation from planned product work. A p
 | M5 — Cleaner Application Shell & Navigation | Authenticated Home, Calendar, Orders, and Profile root surfaces with nested Calendar/Orders navigation | **COMPLETE** |
 | M6 — Backend & Business Architecture Definition | Canonical business model and future backend/API boundaries; architecture only | **ARCHITECTURE APPROVED — IMPLEMENTATION DEFERRED** |
 | M7 — Production Backend Foundation | Production modular-monolith architecture, persistence/auth boundaries, and selected canonical backend commands | **M7-B.1–B.8 COMPLETE — MERGED** |
-| M8 — Reports | Reporting workflows | **PLANNED** |
+| M8 — Mobile ↔ Backend Integration | Online Android authentication/session establishment and canonical Orders read integration | **ARCHITECTURE APPROVED — IMPLEMENTATION NOT STARTED** |
 | M9 — Notifications | Notification workflows | **PLANNED** |
 | M10 — Client/Marketplace foundations | Initial client and marketplace foundations | **PLANNED** |
 | M11 — Security hardening | Security review and hardening | **PLANNED** |
 | M12 — Production release preparation | Production readiness and release preparation | **PLANNED** |
 
-M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. The mobile app still uses an in-memory development composition; it is not connected to the production backend or a mobile Firebase adapter. M7-B.2 backend authentication and Firebase identity-proof verification are implemented separately. Production mobile credential integration and signing remain future work. M6 remains architecture-only; selected backend foundations were implemented under M7-B. The previous Emergency placeholder is deferred without a milestone number; no later milestone number is reassigned here. M8–M12 remain planned and are not claims of existing functionality or settled implementation details.
+| Future capability | Scope | Status |
+| --- | --- | --- |
+| Reports | Reporting workflows | **DEFERRED — no milestone assigned** |
+
+M1 is complete as a provider-independent mobile authentication foundation with tests, CI, and release APK verification on a physical Android device. That verification used the development composition; it did not establish Firebase or production backend integration. M7-B.2 backend authentication and Firebase identity-proof verification are implemented separately. M6 remains architecture-only; selected backend foundations were implemented under M7-B. The previous Emergency placeholder is deferred without a milestone number; no later milestone number is reassigned here. M8's architecture is approved, but implementation has not started. M9–M12 remain planned and are not claims of existing functionality or settled implementation details.
 
 M7-B.1 through M7-B.8 are implemented and merged to `main`. This records repository implementation status only; it does not claim that the backend is deployed, operated in production, or that the mobile app is integrated with it. See [TECH_DEBT.md](TECH_DEBT.md) for open integration, reliability, signing, and operational work.
 
@@ -99,7 +103,21 @@ A later product decision may reorganize the root information architecture as **H
 
 ### M7 — Production Backend Foundation
 
-M7 selected NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions, and application-level authorization boundaries. M7-B.1 through M7-B.8 are implemented and merged to `main`. This does not imply backend deployment or production readiness; mobile-to-backend integration and operational preparation remain deferred. The current implementation state is summarized in [ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md); decisions remain in [ADR-018](ADR-018-production-backend-foundation.md) through [ADR-024](ADR-024-cleaning-scheduling-and-calendar-coordination.md).
+M7 selected NestJS, PostgreSQL, Drizzle, provider-independent Qleanfeel sessions, and application-level authorization boundaries. M7-B.1 through M7-B.8 are implemented and merged to `main`. This does not imply backend deployment or production readiness. The current implementation state is summarized in [ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md); decisions remain in [ADR-018](ADR-018-production-backend-foundation.md) through [ADR-024](ADR-024-cleaning-scheduling-and-calendar-coordination.md).
+
+### M8 — Mobile ↔ Backend Integration — APPROVED ARCHITECTURE
+
+M8's first vertical slice is Firebase identity proof → Qleanfeel session → authenticated `GET /v1/me/orders` → NestJS → PostgreSQL → Android UI. The accepted path must use real HTTP and PostgreSQL-backed behavior, not the development in-memory HTTP fetch. Firebase Phone Authentication is the preferred provider candidate pending project/prerequisite verification. A Session Manager and native secure refresh-token storage are required; `react-native-keychain` is the preferred storage candidate subject to compatibility verification. Refresh ambiguity remains constrained by ADR-019: consumed-token reuse is rejected and no recovery protocol exists. See [ADR-025](ADR-025-mobile-backend-integration.md) for the approved boundaries, failure semantics, acceptance criteria, and environment prerequisites.
+
+These implementation labels are provisional and have not started:
+
+| Proposed slice | Scope | Status |
+| --- | --- | --- |
+| M8-B — Session Foundation | Firebase provider adapter, native secure storage, Session Manager, and authenticated HTTP behavior | **PROPOSED — NOT STARTED** |
+| M8-C — Orders Read Integration | Canonical DTO mapping, repository integration, and Orders UI states | **PROPOSED — NOT STARTED** |
+| M8-D — End-to-End Acceptance | Real Android → HTTP → NestJS → PostgreSQL → Android acceptance and ownership/failure checks | **PROPOSED — NOT STARTED** |
+
+Environment preparation may be needed before M8-D and has no assigned milestone number. M8 does not include offline synchronization or a full offline cache. Reports are deferred without an assigned milestone number.
 
 ### M7-B.4 — Canonical Order + Initial Cleaning + Optional Calendar Scheduling
 

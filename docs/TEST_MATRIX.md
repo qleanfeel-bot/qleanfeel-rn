@@ -108,11 +108,16 @@ The rows below describe coverage present in the repository and checks configured
 
 The M6 architecture and Domain/Data Dictionary are design artifacts, not an M6 software implementation. M7-B.1 through M7-B.8 are merged; the M7 slices implement the selected backend/auth foundation, canonical Order creation and retrieval, Cleaning lifecycle and reads, and Cleaning scheduling coordination. WorkAcceptance, settlement, and Web3 remain separate future concepts. Later Money, tax, Dashboard, Messaging, Evidence, and settlement behavior requires tests if corresponding implementation is approved.
 
-## Future integration tests
+## M8 — Mobile ↔ Backend Integration — APPROVED / NOT STARTED
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Production mobile-to-backend integration and business-resource end-to-end tests | **PLANNED** | The mobile app still uses its development/in-memory composition and is not connected to the production backend. Backend PostgreSQL tests do not validate mobile authentication, mobile API wiring, or a live production deployment. Define mobile migration coverage after separate approval. |
+| Session Manager, refresh coordination, secure-token persistence, and failure-state tests | **PLANNED — M8-B** | M8 architecture is approved in [ADR-025](ADR-025-mobile-backend-integration.md); no production mobile session implementation exists. Mobile auth tests currently use fake provider/API ports. |
+| Canonical Orders DTO mapping, repository, and UI states | **PLANNED — M8-C** | The backend `GET /v1/me/orders` route and PostgreSQL read path exist. The mobile app is not wired to that route and its development ManualOrder contract is not the canonical Orders contract. |
+| Real Android → HTTP → NestJS → PostgreSQL → Android acceptance | **PLANNED — REQUIRED BY M8-D** | Not currently covered by mobile Jest, backend HTTP tests, or backend PostgreSQL integration tests individually. Acceptance must use real HTTP and PostgreSQL-backed behavior, verify owner isolation, and avoid `createDevelopmentHttpFetch`. |
+| Isolated Firebase/PostgreSQL test environment and Android connectivity | **OPEN PREREQUISITE** | Repository Compose/CI config provides PostgreSQL test infrastructure, but no configured Firebase project, shared HTTPS endpoint, VPS, DNS, firewall, or deployed backend is established by this test matrix. Verify prerequisites before device acceptance. |
+
+These are future acceptance requirements, not test results. Existing backend PostgreSQL integration and Android/RN CI checks remain separate layers; neither alone proves the complete mobile-to-database path. The accepted first slice is online-only and must cover loading, success, empty, network failure, server failure, expired/revoked session, and safe error display.
 
 ## Future BLE tests
 
