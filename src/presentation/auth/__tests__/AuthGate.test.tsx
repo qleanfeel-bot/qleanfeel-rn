@@ -2,8 +2,9 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import type { User } from '../../../domain/auth/entities/User';
 import type { ProviderCredential } from '../../../application/auth/ProviderCredential';
-import type { AuthApi } from '../../../application/auth/ports/AuthApi';
 import type { AuthProviderAdapter } from '../../../application/auth/ports/AuthProviderAdapter';
+import type { SessionApi } from '../../../application/auth/ports/SessionApi';
+import type { SecureTokenStore } from '../../../application/auth/ports/SecureTokenStore';
 import type { Profile } from '../../../domain/profile/entities/Profile';
 import type { ProfileRepository } from '../../../domain/profile/repositories/ProfileRepository';
 import type { CalendarRepository } from '../../../domain/calendar/repositories/CalendarRepository';
@@ -12,6 +13,7 @@ import { CalendarService } from '../../../application/calendar/CalendarService';
 import { CreateScheduledManualOrder } from '../../../application/manualOrder/CreateScheduledManualOrder';
 import { ManualOrderService } from '../../../application/manualOrder/ManualOrderService';
 import { AuthStateController } from '../../../application/auth/AuthStateController';
+import { SessionManager } from '../../../application/auth/SessionManager';
 import { ProfileService } from '../../../application/profile/ProfileService';
 import { AuthenticatedAppShell } from '../AuthenticatedAppShell';
 import { AuthGate } from '../AuthGate';
@@ -83,15 +85,35 @@ function createController() {
   const provider: jest.Mocked<AuthProviderAdapter> = {
     requestOtp: jest.fn().mockResolvedValue(undefined),
     verifyOtp: jest.fn().mockResolvedValue(credential),
-    restoreSession: jest.fn().mockResolvedValue(null),
     signOut: jest.fn().mockResolvedValue(undefined),
   };
-  const api: jest.Mocked<AuthApi> = {
-    bootstrap: jest.fn().mockResolvedValue(user),
-    getCurrentUser: jest.fn().mockResolvedValue(user),
+  const api: jest.Mocked<SessionApi> = {
+    bootstrap: jest.fn().mockResolvedValue({
+      user,
+      accessToken: 'test-access',
+      refreshToken: 'test-refresh',
+    }),
+    refresh: jest.fn().mockResolvedValue({
+      user,
+      accessToken: 'test-access',
+      refreshToken: 'test-refresh',
+    }),
+    logout: jest.fn().mockResolvedValue(undefined),
   };
+  const tokenStore: jest.Mocked<SecureTokenStore> = {
+    getRefreshToken: jest.fn().mockResolvedValue(null),
+    setRefreshToken: jest.fn().mockResolvedValue(undefined),
+    deleteRefreshToken: jest.fn().mockResolvedValue(undefined),
+  };
+  const session = new SessionManager(api, tokenStore);
 
-  return { controller: new AuthStateController(provider, api), provider, api };
+  return {
+    controller: new AuthStateController(provider, session),
+    provider,
+    api,
+    tokenStore,
+    session,
+  };
 }
 
 async function renderGate(
@@ -105,7 +127,9 @@ async function renderGate(
     renderer = ReactTestRenderer.create(
       <AuthGate
         calendarService={calendarService}
-        createScheduledManualOrder={new CreateScheduledManualOrder(calendarService, manualOrderService)}
+        createScheduledManualOrder={
+          new CreateScheduledManualOrder(calendarService, manualOrderService)
+        }
         controller={controller}
         manualOrderService={manualOrderService}
         profileService={profileService}
@@ -123,8 +147,12 @@ describe('AuthGate', () => {
 
     const renderer = await renderGate(controller);
 
-    expect(renderer.root.findByProps({ testID: 'auth-gate-restoring' })).toBeTruthy();
-    expect(renderer.root.findByProps({ children: 'Restoring your session…' })).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ testID: 'auth-gate-restoring' }),
+    ).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ children: 'Restoring your session…' }),
+    ).toBeTruthy();
   });
 
   it('renders LoginScreen for unauthenticated state', async () => {
@@ -137,26 +165,34 @@ describe('AuthGate', () => {
   });
 
   it('renders an authentication loading surface while restoration is pending', async () => {
-    const { controller, provider } = createController();
-    provider.restoreSession.mockReturnValue(new Promise(() => undefined));
+    const { controller, tokenStore } = createController();
+    tokenStore.getRefreshToken.mockReturnValue(new Promise(() => undefined));
 
     const renderer = await renderGate(controller);
 
     expect(controller.state).toEqual({ status: 'authenticating' });
-    expect(renderer.root.findByProps({ testID: 'auth-gate-authenticating' })).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ testID: 'auth-gate-authenticating' }),
+    ).toBeTruthy();
   });
 
   it('lands on Home after restoration resolves a user', async () => {
-    const { controller, provider } = createController();
-    provider.restoreSession.mockResolvedValue(credential);
+    const { controller, tokenStore } = createController();
+    tokenStore.getRefreshToken.mockResolvedValue('persisted-refresh');
 
     const renderer = await renderGate(controller);
 
     expect(controller.state).toEqual({ status: 'authenticated', user });
-    expect(renderer.root.findByProps({ testID: 'auth-gate-authenticated' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'authenticated-app-shell' })).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ testID: 'auth-gate-authenticated' }),
+    ).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ testID: 'authenticated-app-shell' }),
+    ).toBeTruthy();
     expect(renderer.root.findByProps({ testID: 'home-screen' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'home-greeting' }).props.children).toBe('Hello, Qleanfeel User');
+    expect(
+      renderer.root.findByProps({ testID: 'home-greeting' }).props.children,
+    ).toBe('Hello, Qleanfeel User');
     expect(renderer.root.findByProps({ testID: 'root-tab-home' })).toBeTruthy();
     const renderedOutput = JSON.stringify(renderer.toJSON());
     expect(renderedOutput).not.toContain(user.id);
@@ -166,26 +202,32 @@ describe('AuthGate', () => {
   });
 
   it('passes the CalendarService to the authenticated shell', async () => {
-    const { controller, provider } = createController();
-    provider.restoreSession.mockResolvedValue(credential);
+    const { controller, tokenStore } = createController();
+    tokenStore.getRefreshToken.mockResolvedValue('persisted-refresh');
     const calendarService = createCalendarService();
 
-    const renderer = await renderGate(controller, createProfileService(), calendarService);
+    const renderer = await renderGate(
+      controller,
+      createProfileService(),
+      calendarService,
+    );
 
     const shell = renderer.root.findByType(AuthenticatedAppShell);
     expect(shell.props.calendarService).toBe(calendarService);
   });
 
   it('routes Profile navigation and logout through AuthStateController.logout', async () => {
-    const { controller, provider } = createController();
-    provider.restoreSession.mockResolvedValue(credential);
+    const { controller, tokenStore, provider } = createController();
+    tokenStore.getRefreshToken.mockResolvedValue('persisted-refresh');
     const logout = jest.spyOn(controller, 'logout');
     const renderer = await renderGate(controller);
 
     await ReactTestRenderer.act(async () => {
       renderer.root.findByProps({ testID: 'root-tab-profile' }).props.onPress();
     });
-    expect(renderer.root.findByProps({ testID: 'profile-screen' })).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ testID: 'profile-screen' }),
+    ).toBeTruthy();
 
     await ReactTestRenderer.act(async () => {
       renderer.root.findByProps({ testID: 'logout-button' }).props.onPress();
@@ -199,8 +241,8 @@ describe('AuthGate', () => {
   });
 
   it('requests the profile for the authenticated Qleanfeel user ID', async () => {
-    const { controller, provider } = createController();
-    provider.restoreSession.mockResolvedValue(credential);
+    const { controller, tokenStore } = createController();
+    tokenStore.getRefreshToken.mockResolvedValue('persisted-refresh');
     const profileService = createProfileService();
     const getProfile = jest.spyOn(profileService, 'getProfile');
 
@@ -210,20 +252,21 @@ describe('AuthGate', () => {
   });
 
   it('returns to LoginScreen when the session has expired', async () => {
-    const { controller, provider } = createController();
-    provider.restoreSession.mockRejectedValue({ code: 'SessionExpired' });
+    const { controller, api, tokenStore } = createController();
+    tokenStore.getRefreshToken.mockResolvedValue('persisted-refresh');
+    api.refresh.mockRejectedValue({ code: 'Unauthorized' });
 
     const renderer = await renderGate(controller);
 
     expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'auth-error' }).props.children).toBe(
-      'Your session has expired. Please sign in again.',
-    );
+    expect(
+      renderer.root.findByProps({ testID: 'auth-error' }).props.children,
+    ).toBe('Your session has expired. Please sign in again.');
   });
 
   it('shows a safe auth error and does not expose raw infrastructure messages', async () => {
-    const { controller, provider } = createController();
-    provider.restoreSession.mockRejectedValue({
+    const { controller, tokenStore } = createController();
+    tokenStore.getRefreshToken.mockRejectedValue({
       message: 'private provider stack detail',
       secret: credential,
     });
@@ -231,10 +274,12 @@ describe('AuthGate', () => {
     const renderer = await renderGate(controller);
 
     expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'auth-error' }).props.children).toBe(
-      'We could not sign you in. Please try again.',
+    expect(
+      renderer.root.findByProps({ testID: 'auth-error' }).props.children,
+    ).toBe('Secure sign-in storage is unavailable. Please try again.');
+    expect(JSON.stringify(renderer.toJSON())).not.toContain(
+      'private provider stack detail',
     );
-    expect(JSON.stringify(renderer.toJSON())).not.toContain('private provider stack detail');
     expect(JSON.stringify(renderer.toJSON())).not.toContain(credential);
   });
 
@@ -268,13 +313,14 @@ describe('AuthGate', () => {
   });
 
   it('starts restoration through the controller, not directly through a provider', async () => {
-    const { controller, provider } = createController();
+    const { controller, tokenStore } = createController();
     const initialize = jest.spyOn(controller, 'initialize');
+    tokenStore.getRefreshToken.mockResolvedValue(null);
 
     await renderGate(controller);
 
     expect(initialize).toHaveBeenCalledTimes(1);
-    expect(provider.restoreSession).toHaveBeenCalledTimes(1);
+    expect(tokenStore.getRefreshToken).toHaveBeenCalledTimes(1);
   });
 
   it('preserves LoginScreen form input while the gate displays OTP loading', async () => {
@@ -288,14 +334,22 @@ describe('AuthGate', () => {
     const renderer = await renderGate(controller);
 
     await ReactTestRenderer.act(async () => {
-      renderer.root.findByProps({ testID: 'phone-input' }).props.onChangeText('+15550100');
+      renderer.root
+        .findByProps({ testID: 'phone-input' })
+        .props.onChangeText('+15550100');
     });
     await ReactTestRenderer.act(async () => {
-      renderer.root.findByProps({ testID: 'request-otp-button' }).props.onPress();
+      renderer.root
+        .findByProps({ testID: 'request-otp-button' })
+        .props.onPress();
     });
 
-    expect(renderer.root.findByProps({ testID: 'auth-gate-authenticating' })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: 'phone-input' }).props.value).toBe('+15550100');
+    expect(
+      renderer.root.findByProps({ testID: 'auth-gate-authenticating' }),
+    ).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ testID: 'phone-input' }).props.value,
+    ).toBe('+15550100');
 
     await ReactTestRenderer.act(async () => {
       finishOtpRequest();
@@ -303,25 +357,31 @@ describe('AuthGate', () => {
     });
     expect(renderer.root.findByProps({ testID: 'otp-input' })).toBeTruthy();
     await ReactTestRenderer.act(async () => {
-      renderer.root.findByProps({ testID: 'otp-input' }).props.onChangeText('123456');
+      renderer.root
+        .findByProps({ testID: 'otp-input' })
+        .props.onChangeText('123456');
     });
     await ReactTestRenderer.act(async () => {
-      renderer.root.findByProps({ testID: 'verify-otp-button' }).props.onPress();
+      renderer.root
+        .findByProps({ testID: 'verify-otp-button' })
+        .props.onPress();
     });
 
     expect(provider.verifyOtp).toHaveBeenCalledWith('+15550100', '123456');
   });
 
   it('does not update the unmounted gate when async restoration finishes', async () => {
-    const { controller, provider } = createController();
-    let finishRestore: (value: ProviderCredential | null) => void = () => undefined;
-    provider.restoreSession.mockReturnValue(
+    const { controller, tokenStore } = createController();
+    let finishRestore: (value: string | null) => void = () => undefined;
+    tokenStore.getRefreshToken.mockReturnValue(
       new Promise(resolve => {
         finishRestore = resolve;
       }),
     );
     const renderer = await renderGate(controller);
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
     await ReactTestRenderer.act(() => renderer.unmount());
     await ReactTestRenderer.act(async () => {

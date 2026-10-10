@@ -11,5 +11,6 @@ export interface User {
   readonly id: UserId;
   readonly status: UserStatus;
   readonly createdAt: Date;
-  readonly updatedAt: Date;
+  /** Bootstrap/refresh responses omit updatedAt; GET /me includes it. */
+  readonly updatedAt?: Date;
 }

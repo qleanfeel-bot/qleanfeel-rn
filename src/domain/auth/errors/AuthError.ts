@@ -6,6 +6,9 @@ export type AuthErrorCode =
   | 'NetworkError'
   | 'AuthenticationRequired'
   | 'SessionExpired'
+  | 'SecureStorageError'
+  | 'LogoutIncomplete'
+  | 'AccountUnavailable'
   | 'UnknownAuthError';
 
 export interface AuthError {

@@ -32,7 +32,7 @@ For the current and planned module/data-flow views, see the [Living Architecture
 - Android enables the New Architecture and Hermes. Android builds include debug and release variants; the release build bundles JavaScript for Metro-independent runtime use.
 - The implemented authentication foundation is organized under `src/domain/auth/`, `src/application/auth/`, and `src/presentation/auth/`. It includes provider-independent domain entities/contracts, `AuthStateController`, a provider/API boundary, `LoginScreen`, and `AuthGate`.
 - The app uses `src/development/auth/createDevelopmentAuthController.ts` for an in-memory UI preview. This development composition is not production authentication and does not provide Firebase, a real backend, or credential persistence.
-- The current mobile Jest suite has 30 suites and 276 tests. These tests exercise mobile domain/application and presentation behavior with fakes and development in-memory handlers; they are not real mobile-to-backend integration tests. Backend tests are tracked separately in [TEST_MATRIX.md](TEST_MATRIX.md).
+- The current M8-B.1 branch's mobile Jest suite has 34 suites and 303 tests, with `npx tsc --noEmit` passing locally. Tests exercise mobile behavior with fakes and development in-memory handlers; they are not real mobile-to-backend integration tests. Backend tests are tracked separately in [TEST_MATRIX.md](TEST_MATRIX.md).
 - The release APK has been installed and tested on physical Android hardware using the development authentication composition. Release signing still uses the debug keystore; production signing is not configured.
 - GitHub Actions runs TypeScript, ESLint, Jest, Android debug and release builds, and uploads both APK artifacts.
 
@@ -87,25 +87,28 @@ The backend is implemented as a NestJS modular-monolith foundation under `backen
 
 These are governance principles for future work, not claims that corresponding systems already exist.
 
-## Authentication — BACKEND FOUNDATION IMPLEMENTED; M8 MOBILE INTEGRATION ARCHITECTURE APPROVED, IMPLEMENTATION NOT STARTED
+## Authentication — BACKEND FOUNDATION IMPLEMENTED; M8-B.1 SESSION FOUNDATION UNDER REVIEW
 
 The backend has provider-independent `User`, `AuthIdentity`, `AuthSession`, and refresh-token domain concepts. Firebase Admin verifies identity proof at bootstrap and returns a normalized provider subject; the Firebase UID is not the Qleanfeel User ID. Bootstrap resolves or provisions the Qleanfeel identity and creates a session. Protected requests use Qleanfeel-issued access credentials and current server-side session/account state. See [ADR-019](ADR-019-identity-authentication-foundation.md).
 
 The approved M8 target is Firebase identity proof → Qleanfeel session → authenticated canonical Orders read → Android UI, using real HTTP and PostgreSQL-backed behavior for acceptance. The architecture requires a dedicated Session Manager, native secure refresh-token storage, and a provider-independent Orders model. Firebase Phone Authentication is the preferred candidate pending project/prerequisite verification; `react-native-keychain` is the preferred storage candidate pending compatibility verification. These are architecture decisions and candidates, not evidence that mobile integration or Firebase configuration is implemented. See [ADR-025](ADR-025-mobile-backend-integration.md).
 
-### Mobile state and provider boundary — CONTRACTS IMPLEMENTED; APP STILL USES DEVELOPMENT COMPOSITION
+### Mobile state and provider boundary — SESSION FOUNDATION IMPLEMENTED; APP STILL USES DEVELOPMENT COMPOSITION
 
 The mobile Domain/Application boundary is provider-agnostic. Provider-specific SDK types and exceptions must stay inside a future adapter. Current contracts make the boundary explicit:
 
 ```text
 AuthStateController
-       ↓
-AuthProviderAdapter / AuthApi ports
-       ↓
-development in-memory composition (currently wired)
+  ├─ AuthProviderAdapter → opaque external identity proof
+  └─ SessionManager
+       ├─ SessionApi → bootstrap / refresh / logout
+       ├─ SecureTokenStore → Keychain adapter
+       └─ access credential in memory → authenticated HttpTransport
 ```
 
-`AuthStateController` owns mobile application authentication state. Its provider/API ports and the development fake remain in place, but the current mobile app does not call the production backend or use a mobile Firebase adapter. The backend Firebase verifier, Qleanfeel access/refresh credentials, session persistence, and authenticated-principal resolution are implemented separately. The mobile API transport remains connected to the development in-memory handler.
+`AuthStateController` owns safe mobile authentication state and delegates Qleanfeel session lifecycle to `SessionManager`. `SessionManager` uses the `SessionApi` and `SecureTokenStore` application ports: access credentials remain in memory, refresh credentials are stored through native Keychain, and the HTTP adapter coordinates a single in-flight refresh with at most one retry per protected request. Public bootstrap/refresh calls do not enter the protected retry path. A failed or ambiguous refresh clears the usable local session; consumed refresh tokens are not replayed. Local logout blocks protected access and clears secure storage before best-effort server revocation.
+
+`HttpSessionApi` implements the verified backend bootstrap/refresh/logout contracts, but no mobile Firebase adapter or production base URL is configured. The feature branch provides `createSessionFoundation`; `App.tsx` continues to select `createDevelopmentComposition()`. The latter uses fake OTP/session adapters, in-memory refresh storage, and fake business HTTP handlers. It is not production authentication. The M8-B.0 screen remains behind `__DEV__ && Platform.OS === 'android'`; this is not a release-bundle exclusion claim.
 
 `AuthGate` is a Presentation-layer consumer of `AuthStateController`: it subscribes, initiates restoration through the controller, and selects loading, LoginScreen, or `AuthenticatedAppShell`. The authenticated shell mounts `RootNavigator`; `MainNavigator` provides Home, Calendar, Orders, and Profile root tabs. ProfileScreen obtains profile data through `ProfileService`, displays the Qleanfeel profile card with the authenticated account status, and provides logout. `LoginScreen` submits user actions through the controller; when rendered by AuthGate it receives the current AuthState and does not own global auth state or restoration lifecycle. It retains only UI-local form input. The current App composition uses `src/development/auth/createDevelopmentAuthController.ts`, an in-memory development-only fake; it is not production authentication and must not be treated as such.
 
@@ -133,7 +136,7 @@ AccessTokenProvider → HttpTransport
 
 The current development composition connects `HttpTransport` to an in-memory HTTP handler. A production Profile backend and persistence are not implemented.
 
-`AccessTokenProvider` only supplies an opaque API access token. It does not manage login/logout or retain User/AuthState. It is distinct from `ProviderCredential`, which the auth flow passes to `AuthApi`. No Firebase adapter, token refresh, production credential persistence, or production backend URL is implemented.
+`AccessTokenProvider` supplies the in-memory Qleanfeel access token and the optional bounded refresh hooks used by `HttpTransport`; `SessionManager` owns lifecycle and is not a business model. It is distinct from `ProviderCredential`, which is passed only to `SessionApi.bootstrap`. Firebase SDK types remain unimplemented/mobile-provider-specific and do not enter these ports. Keychain was runtime-checked in the M8-B.0 spike on one Android API 33 device; backup, reset, key invalidation, and a broad device matrix remain open.
 
 Both endpoints require an authenticated request. The caller's identity is resolved by the backend from the trusted authentication context; the client does not select a profile using a `userId` path, query, or request-body field. `ProfileRepository` retains its `userId` argument for application consistency; the API always calls `/v1/me/profile`, and a response whose `profile.userId` differs from the requested ID is rejected. M2.5 established the token-provider boundary and HTTP implementation but did not implement production authentication, token storage, or refresh behavior.
 

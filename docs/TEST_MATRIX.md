@@ -14,7 +14,7 @@ Statuses describe the current repository unless a row is explicitly marked as fu
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Jest (`npm test -- --runInBand`) | **PASSED — 30 suites / 276 tests** | Covers M2-M4 regression plus M5 Home, Calendar presentation/navigation, shared OrderDetails, AuthGate/application shell, and root navigation integration. Tests use fakes/in-memory handlers; no real Firebase/backend integration is covered. |
+| Jest (`npm test -- --ci`) | **M8-B.1 LOCAL RESULT — 34 suites / 303 tests** | Full suite passed on the M8-B.1 feature branch. Tests use fakes/in-memory handlers; no real Firebase/backend integration is covered. |
 
 ## Android build verification
 
@@ -108,11 +108,14 @@ The rows below describe coverage present in the repository and checks configured
 
 The M6 architecture and Domain/Data Dictionary are design artifacts, not an M6 software implementation. M7-B.1 through M7-B.8 are merged; the M7 slices implement the selected backend/auth foundation, canonical Order creation and retrieval, Cleaning lifecycle and reads, and Cleaning scheduling coordination. WorkAcceptance, settlement, and Web3 remain separate future concepts. Later Money, tax, Dashboard, Messaging, Evidence, and settlement behavior requires tests if corresponding implementation is approved.
 
-## M8 — Mobile ↔ Backend Integration — APPROVED / NOT STARTED
+## M8 — Mobile ↔ Backend Integration — APPROVED / SESSION FOUNDATION UNDER REVIEW
 
 | Check | Status | Current coverage |
 | --- | --- | --- |
-| Session Manager, refresh coordination, secure-token persistence, and failure-state tests | **PLANNED — M8-B** | M8 architecture is approved in [ADR-025](ADR-025-mobile-backend-integration.md); no production mobile session implementation exists. Mobile auth tests currently use fake provider/API ports. |
+| Session lifecycle, secure-token adapter, refresh rotation/failure, logout, and HTTP single-flight/retry tests | **LOCAL PASSED — M8-B.1 FEATURE BRANCH; PR CI PENDING** | `SessionManager.test.ts`, `HttpSessionApi.test.ts`, `KeychainSecureTokenStore.test.ts`, and `HttpTransport.test.ts` cover the provider-independent implementation with fakes. This is not real Firebase or backend integration. |
+| Full mobile Jest suite and TypeScript typecheck after M8-B.1 | **LOCAL PASSED — 34 suites / 303 tests; `npx tsc --noEmit` passed** | Executed on the M8-B.1 feature branch. GitHub CI remains a separate pending result until the Draft PR workflow completes. |
+| M8-B.1 lint, formatting, and whitespace checks | **LOCAL PASSED** | `npm run lint`, Prettier check of changed TypeScript/TSX files, and `git diff --check` passed. Android Gradle build was not run locally because only 4.3 GB disk space was available; the PR CI workflow builds debug and release APKs. |
+| Firebase phone sign-in, configured production session composition, and real API environment | **NOT IMPLEMENTED — PREREQUISITES OPEN** | No mobile Firebase adapter/configuration or production base URL is added by M8-B.1; app remains on development composition. |
 | Canonical Orders DTO mapping, repository, and UI states | **PLANNED — M8-C** | The backend `GET /v1/me/orders` route and PostgreSQL read path exist. The mobile app is not wired to that route and its development ManualOrder contract is not the canonical Orders contract. |
 | Real Android → HTTP → NestJS → PostgreSQL → Android acceptance | **PLANNED — REQUIRED BY M8-D** | Not currently covered by mobile Jest, backend HTTP tests, or backend PostgreSQL integration tests individually. Acceptance must use real HTTP and PostgreSQL-backed behavior, verify owner isolation, and avoid `createDevelopmentHttpFetch`. |
 | Isolated Firebase/PostgreSQL test environment and Android connectivity | **OPEN PREREQUISITE** | Repository Compose/CI config provides PostgreSQL test infrastructure, but no configured Firebase project, shared HTTPS endpoint, VPS, DNS, firewall, or deployed backend is established by this test matrix. Verify prerequisites before device acceptance. |
@@ -135,14 +138,14 @@ The mobile auth foundation and its boundary-level tests are implemented. These t
 | Login UI phone/code flow, progress, safe errors, retry, subscription lifecycle, credential non-disclosure | **IMPLEMENTED** | `src/presentation/auth/__tests__/LoginScreen.test.tsx` (10 tests) exercises LoginScreen with a fake AuthStateController boundary. |
 | AuthGate state mapping, restoration trigger, subscription lifecycle, stale/unmounted behavior, form preservation, authenticated card and logout | **IMPLEMENTED** | `src/presentation/auth/__tests__/AuthGate.test.tsx` (12 tests) exercises gate behavior using fake ports. |
 | App composition and development OTP preview flow | **IMPLEMENTED** | `__tests__/App.test.tsx` (4 tests) verifies root integration and the in-memory development composition; this is not a production provider. |
-| HTTP transport status, JSON, authorization, and network behavior | **IMPLEMENTED** | `src/infrastructure/http/__tests__/HttpTransport.test.ts` covers GET/PATCH JSON, token/no-token headers, safe 400/401/403/404/500 mapping, and network failure. |
+| HTTP transport status, JSON, authorization, and network behavior | **IMPLEMENTED** | `src/infrastructure/http/__tests__/HttpTransport.test.ts` covers GET/PATCH JSON, bearer attachment, blocking protected requests without a token, safe 400/401/403/404/500 mapping, bounded refresh/retry, and network failure. |
 | Profile API/repository contract and mapping | **IMPLEMENTED** | `src/infrastructure/profile/__tests__/ProfileApiRepository.test.ts` verifies `/v1/me/profile`, PATCH body, DTO mapping, 404-to-null, safe status errors, and requested identity consistency. |
 | Development access-token and service-to-transport chain | **IMPLEMENTED** | `src/infrastructure/auth/__tests__/DevelopmentAccessTokenProvider.test.ts` and `src/development/__tests__/createDevelopmentComposition.test.ts` verify bearer-header use and profile read/update without a backend. |
-| Mobile Firebase login, credential transfer, and session restoration | **PLANNED** | The backend Firebase identity-proof verifier and Qleanfeel auth APIs are implemented; the mobile app still uses a development auth adapter and is not connected to them. |
+| Mobile Firebase login, credential transfer, and session restoration | **PLANNED — M8-B REMAINS INCOMPLETE** | M8-B.1 implements provider-independent Qleanfeel session handling; the mobile Firebase adapter and production composition are not implemented. |
 | Real authentication restoration and provider sign-out | **PLANNED** | Controller behavior with fake ports is tested; restoration/logout against a real provider remains unverified. |
 | Backend 401/403 handling, user provisioning/bootstrap, and current-user retrieval | **IMPLEMENTED** | Backend tests cover Qleanfeel bootstrap/session authentication and `/v1/me`; mobile `HttpTransport` remains connected to a development handler. |
 | Application authorization boundary | **IMPLEMENTED** | M7-B.3 provides the framework-independent policy boundary; M7-B.5 and B.6 use pure ownership policies over already loaded resource facts. Future assignment/participation policies remain out of scope. |
-| M1.7 final test coverage | **IMPLEMENTED** | At M1 completion, 44 Jest tests passed across the four suites then present. The current full repository suite is 30 suites / 276 tests. Coverage uses fakes and does not claim real provider/backend integration. |
+| M1.7 final test coverage | **IMPLEMENTED** | At M1 completion, 44 Jest tests passed across the four suites then present. The current full repository suite is 34 suites / 303 tests after M8-B.1. Coverage uses fakes and does not claim real provider/backend integration. |
 | M1.8 CI verification | **IMPLEMENTED** | CI is green for TypeScript, ESLint, Jest, Android debug/release builds, and debug/release APK artifacts. |
 | M1.9 release APK + physical-device verification | **IMPLEMENTED** | Release APK was installed and tested successfully on physical Android hardware using the development auth composition. This does not verify Firebase/backend auth or production signing. |
 

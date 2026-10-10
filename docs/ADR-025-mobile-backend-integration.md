@@ -1,6 +1,6 @@
 # ADR-025 — Mobile ↔ Backend Integration
 
-- **Status:** Accepted architecture decision for M8; implementation not started
+- **Status:** Accepted architecture decision; M8-B.1 session foundation is implemented on a feature branch and awaiting review; Firebase provider integration, Orders read integration, and end-to-end acceptance remain unimplemented
 - **Date:** 2026-10-09
 - **Scope:** First online mobile integration slice: authentication/session establishment and authenticated canonical Order reads on Android
 - **Related:** [ADR-018](ADR-018-production-backend-foundation.md), [ADR-019](ADR-019-identity-authentication-foundation.md), [ADR-020](ADR-020-authorization-foundation.md), [ADR-021](ADR-021-canonical-order-creation-and-optional-scheduling.md), [ADR-022](ADR-022-order-retrieval-read-path.md), [ADR-023](ADR-023-cleaning-execution-lifecycle.md), [ADR-024](ADR-024-cleaning-scheduling-and-calendar-coordination.md), [Architecture Map](ARCHITECTURE_MAP.md), [Roadmap](ROADMAP.md)
@@ -105,6 +105,14 @@ The following labels are provisional and describe future work, not completed or 
 | **M8-D — End-to-End Acceptance**   | Real Android, HTTP, backend, PostgreSQL, ownership isolation, and failure-path verification              | The complete acceptance path above is demonstrated in an isolated environment.                        |
 
 Environment preparation may be a prerequisite for M8-D; it is not assigned a milestone number here.
+
+### M8-B.1 implementation status
+
+The M8-B.1 feature branch adds a provider-independent `SessionManager`, a `SessionApi` port and HTTP adapter for bootstrap/refresh/logout, a `SecureTokenStore` port and Keychain adapter, and bounded 401 refresh/retry coordination in `HttpTransport`. The refresh token is persisted before a session is made available; access credentials remain in memory. Failed or ambiguous refresh outcomes clear usable local credentials and require authentication again. Local logout blocks protected access and clears secure storage before best-effort server revocation; the caller can distinguish confirmed revocation from an unconfirmed attempt.
+
+This implementation is not yet merged. It does not add a Firebase mobile SDK/adapter, select a backend base URL, or activate a production composition. `App.tsx` continues to use the explicit development composition; its OTP and business HTTP behavior remain fake/in-memory. The Keychain spike provides one-device build/runtime evidence, not universal device coverage or confirmation of backup, reset, and key-invalidation behavior. M8-B remains incomplete until its remaining provider/environment gates are addressed. No Orders screen, Orders API, or real Android-to-backend-to-PostgreSQL path is implemented by M8-B.1.
+
+Local verification on the feature branch: TypeScript typecheck and the full Jest suite passed (34 suites, 303 tests). GitHub CI and merge status are tracked by the feature PR, not inferred here.
 
 ## Non-goals
 

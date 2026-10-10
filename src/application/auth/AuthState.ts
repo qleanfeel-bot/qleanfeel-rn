@@ -7,7 +7,7 @@ export type AuthState =
   | { readonly status: 'unauthenticated' }
   | { readonly status: 'authenticating' }
   | { readonly status: 'awaitingOtp' }
-  // AuthApi currently returns User only, so the controller does not synthesize an AuthSession.
+  // Credentials are kept by SessionManager and never exposed through UI state.
   | { readonly status: 'authenticated'; readonly user: User }
   | { readonly status: 'sessionExpired' }
   | { readonly status: 'error'; readonly error: AuthError };

@@ -2,9 +2,11 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import type { User } from '../../../domain/auth/entities/User';
 import type { ProviderCredential } from '../../../application/auth/ProviderCredential';
-import type { AuthApi } from '../../../application/auth/ports/AuthApi';
 import type { AuthProviderAdapter } from '../../../application/auth/ports/AuthProviderAdapter';
+import type { SessionApi } from '../../../application/auth/ports/SessionApi';
+import type { SecureTokenStore } from '../../../application/auth/ports/SecureTokenStore';
 import { AuthStateController } from '../../../application/auth/AuthStateController';
+import { SessionManager } from '../../../application/auth/SessionManager';
 import { LoginScreen } from '../LoginScreen';
 
 const user: User = {
@@ -19,21 +21,44 @@ function createController() {
   const provider: jest.Mocked<AuthProviderAdapter> = {
     requestOtp: jest.fn().mockResolvedValue(undefined),
     verifyOtp: jest.fn().mockResolvedValue(secretCredential),
-    restoreSession: jest.fn().mockResolvedValue(null),
     signOut: jest.fn().mockResolvedValue(undefined),
   };
-  const api: jest.Mocked<AuthApi> = {
-    bootstrap: jest.fn().mockResolvedValue(user),
-    getCurrentUser: jest.fn().mockResolvedValue(user),
+  const api: jest.Mocked<SessionApi> = {
+    bootstrap: jest.fn().mockResolvedValue({
+      user,
+      accessToken: 'test-access',
+      refreshToken: 'test-refresh',
+    }),
+    refresh: jest.fn().mockResolvedValue({
+      user,
+      accessToken: 'test-access',
+      refreshToken: 'test-refresh',
+    }),
+    logout: jest.fn().mockResolvedValue(undefined),
+  };
+  const tokenStore: jest.Mocked<SecureTokenStore> = {
+    getRefreshToken: jest.fn().mockResolvedValue(null),
+    setRefreshToken: jest.fn().mockResolvedValue(undefined),
+    deleteRefreshToken: jest.fn().mockResolvedValue(undefined),
   };
 
-  return { controller: new AuthStateController(provider, api), provider, api };
+  return {
+    controller: new AuthStateController(
+      provider,
+      new SessionManager(api, tokenStore),
+    ),
+    provider,
+    api,
+    tokenStore,
+  };
 }
 
 async function renderLogin(controller: AuthStateController) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
-    renderer = ReactTestRenderer.create(<LoginScreen controller={controller} />);
+    renderer = ReactTestRenderer.create(
+      <LoginScreen controller={controller} />,
+    );
   });
   return renderer;
 }
@@ -51,7 +76,9 @@ describe('LoginScreen', () => {
     const { controller } = createController();
     const renderer = await renderLogin(controller);
 
-    expect(input(renderer, 'phone-input').props.accessibilityLabel).toBe('Phone number');
+    expect(input(renderer, 'phone-input').props.accessibilityLabel).toBe(
+      'Phone number',
+    );
   });
 
   it('requests an OTP and then displays the code input', async () => {
@@ -86,7 +113,9 @@ describe('LoginScreen', () => {
 
     expect(provider.verifyOtp).toHaveBeenCalledWith('+15550100', '123456');
     expect(api.bootstrap).toHaveBeenCalledWith(secretCredential);
-    expect(renderer.root.findByProps({ testID: 'login-authenticated' })).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ testID: 'login-authenticated' }),
+    ).toBeTruthy();
   });
 
   it('shows progress and disables actions while authenticating', async () => {
@@ -117,7 +146,10 @@ describe('LoginScreen', () => {
 
   it('renders a safe message for authentication errors, not the raw error message', async () => {
     const { controller, provider } = createController();
-    provider.requestOtp.mockRejectedValue({ code: 'TooManyRequests', message: secretCredential });
+    provider.requestOtp.mockRejectedValue({
+      code: 'TooManyRequests',
+      message: secretCredential,
+    });
     const renderer = await renderLogin(controller);
     await ReactTestRenderer.act(async () => {
       input(renderer, 'phone-input').props.onChangeText('+15550100');
@@ -126,9 +158,9 @@ describe('LoginScreen', () => {
       button(renderer, 'request-otp-button').props.onPress();
     });
 
-    expect(renderer.root.findByProps({ testID: 'auth-error' }).props.children).toBe(
-      'Too many requests. Please try again later.',
-    );
+    expect(
+      renderer.root.findByProps({ testID: 'auth-error' }).props.children,
+    ).toBe('Too many requests. Please try again later.');
     expect(JSON.stringify(renderer.toJSON())).not.toContain(secretCredential);
   });
 
@@ -157,7 +189,10 @@ describe('LoginScreen', () => {
   it('shows a safe InvalidCode message and allows verification retry', async () => {
     const { controller, provider } = createController();
     provider.verifyOtp
-      .mockRejectedValueOnce({ code: 'InvalidCode', message: 'private invalid-code details' })
+      .mockRejectedValueOnce({
+        code: 'InvalidCode',
+        message: 'private invalid-code details',
+      })
       .mockResolvedValueOnce(secretCredential);
     const renderer = await renderLogin(controller);
     await ReactTestRenderer.act(async () => {
@@ -173,12 +208,16 @@ describe('LoginScreen', () => {
       button(renderer, 'verify-otp-button').props.onPress();
     });
 
-    expect(renderer.root.findByProps({ testID: 'auth-error' }).props.children).toBe(
-      'That code is not valid. Check it and try again.',
+    expect(
+      renderer.root.findByProps({ testID: 'auth-error' }).props.children,
+    ).toBe('That code is not valid. Check it and try again.');
+    expect(renderer.root.findByProps({ testID: 'otp-input' }).props.value).toBe(
+      'bad-code',
     );
-    expect(renderer.root.findByProps({ testID: 'otp-input' }).props.value).toBe('bad-code');
     expect(button(renderer, 'verify-otp-button').props.disabled).toBe(false);
-    expect(JSON.stringify(renderer.toJSON())).not.toContain('private invalid-code details');
+    expect(JSON.stringify(renderer.toJSON())).not.toContain(
+      'private invalid-code details',
+    );
 
     await ReactTestRenderer.act(async () => {
       input(renderer, 'otp-input').props.onChangeText('123456');
@@ -187,9 +226,19 @@ describe('LoginScreen', () => {
       button(renderer, 'verify-otp-button').props.onPress();
     });
 
-    expect(provider.verifyOtp).toHaveBeenNthCalledWith(1, '+15550100', 'bad-code');
-    expect(provider.verifyOtp).toHaveBeenNthCalledWith(2, '+15550100', '123456');
-    expect(renderer.root.findByProps({ testID: 'login-authenticated' })).toBeTruthy();
+    expect(provider.verifyOtp).toHaveBeenNthCalledWith(
+      1,
+      '+15550100',
+      'bad-code',
+    );
+    expect(provider.verifyOtp).toHaveBeenNthCalledWith(
+      2,
+      '+15550100',
+      '123456',
+    );
+    expect(
+      renderer.root.findByProps({ testID: 'login-authenticated' }),
+    ).toBeTruthy();
   });
 
   it('subscribes to AuthStateController on mount', async () => {
