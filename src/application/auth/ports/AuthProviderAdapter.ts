@@ -8,11 +8,8 @@ import type { ProviderCredential } from '../ProviderCredential';
 export interface AuthProviderAdapter {
   requestOtp(phoneNumber: string): Promise<void>;
 
-  /** Returns an opaque credential for the application to pass to AuthApi. */
+  /** Returns provider identity proof for Qleanfeel session bootstrap. */
   verifyOtp(phoneNumber: string, code: string): Promise<ProviderCredential>;
-
-  /** Restores provider-managed state as a credential, not a Qleanfeel session. */
-  restoreSession(): Promise<ProviderCredential | null>;
 
   signOut(): Promise<void>;
 }

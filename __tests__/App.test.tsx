@@ -5,12 +5,14 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import App from '../App';
-import { createDevelopmentAuthController } from '../src/development/auth/createDevelopmentAuthController';
+import { createDevelopmentComposition } from '../src/development/createDevelopmentComposition';
 
 const mountedRenderers: ReactTestRenderer.ReactTestRenderer[] = [];
 
 afterEach(() => {
-  ReactTestRenderer.act(() => mountedRenderers.splice(0).forEach(renderer => renderer.unmount()));
+  ReactTestRenderer.act(() =>
+    mountedRenderers.splice(0).forEach(renderer => renderer.unmount()),
+  );
 });
 
 test('renders LoginScreen in the Qleanfeel root component', async () => {
@@ -21,23 +23,27 @@ test('renders LoginScreen in the Qleanfeel root component', async () => {
   });
   mountedRenderers.push(renderer!);
 
-  expect(renderer!.root.findByProps({testID: 'qleanfeel-root'})).toBeTruthy();
-  expect(renderer!.root.findByProps({testID: 'login-screen'})).toBeTruthy();
-  expect(renderer!.root.findByProps({testID: 'phone-input'})).toBeTruthy();
-  expect(renderer!.root.findByProps({children: 'Sign in to Qleanfeel'})).toBeTruthy();
+  expect(renderer!.root.findByProps({ testID: 'qleanfeel-root' })).toBeTruthy();
+  expect(renderer!.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
+  expect(renderer!.root.findByProps({ testID: 'phone-input' })).toBeTruthy();
+  expect(
+    renderer!.root.findByProps({ children: 'Sign in to Qleanfeel' }),
+  ).toBeTruthy();
 });
 
 test('supplies the injected AuthStateController to LoginScreen', async () => {
-  const authController = createDevelopmentAuthController();
+  const { authController } = createDevelopmentComposition();
   const subscribe = jest.spyOn(authController, 'subscribe');
   let renderer: ReactTestRenderer.ReactTestRenderer;
 
   await ReactTestRenderer.act(async () => {
-    renderer = ReactTestRenderer.create(<App authController={authController} />);
+    renderer = ReactTestRenderer.create(
+      <App authController={authController} />,
+    );
   });
   mountedRenderers.push(renderer!);
 
-  expect(renderer!.root.findByProps({testID: 'login-screen'})).toBeTruthy();
+  expect(renderer!.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
   expect(subscribe).toHaveBeenCalledTimes(1);
 });
 
@@ -49,8 +55,12 @@ test('renders using the development composition without provider or API infrastr
   });
   mountedRenderers.push(renderer!);
 
-  expect(renderer!.root.findByProps({testID: 'request-otp-button'})).toBeTruthy();
-  expect(JSON.stringify(renderer!.toJSON())).not.toContain('development-preview-credential');
+  expect(
+    renderer!.root.findByProps({ testID: 'request-otp-button' }),
+  ).toBeTruthy();
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain(
+    'development-preview-credential',
+  );
 });
 
 test('development composition exercises OTP and authenticated UI without exposing its credential', async () => {
@@ -61,39 +71,54 @@ test('development composition exercises OTP and authenticated UI without exposin
   mountedRenderers.push(renderer);
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'phone-input'}).props.onChangeText('+15550100');
+    renderer.root
+      .findByProps({ testID: 'phone-input' })
+      .props.onChangeText('+15550100');
   });
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'request-otp-button'}).props.onPress();
+    renderer.root.findByProps({ testID: 'request-otp-button' }).props.onPress();
   });
-  expect(renderer.root.findByProps({testID: 'otp-input'})).toBeTruthy();
+  expect(renderer.root.findByProps({ testID: 'otp-input' })).toBeTruthy();
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'otp-input'}).props.onChangeText('000000');
+    renderer.root
+      .findByProps({ testID: 'otp-input' })
+      .props.onChangeText('000000');
   });
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'verify-otp-button'}).props.onPress();
+    renderer.root.findByProps({ testID: 'verify-otp-button' }).props.onPress();
   });
 
-  expect(renderer.root.findByProps({testID: 'auth-gate-authenticated'})).toBeTruthy();
-  expect(renderer.root.findByProps({testID: 'home-screen'})).toBeTruthy();
-  expect(JSON.stringify(renderer.toJSON())).not.toContain('development-preview-credential');
+  expect(
+    renderer.root.findByProps({ testID: 'auth-gate-authenticated' }),
+  ).toBeTruthy();
+  expect(renderer.root.findByProps({ testID: 'home-screen' })).toBeTruthy();
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'development-preview-credential',
+  );
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'root-tab-calendar'}).props.onPress();
+    renderer.root.findByProps({ testID: 'root-tab-calendar' }).props.onPress();
   });
 
-  expect(renderer.root.findByProps({testID: 'calendar-screen'})).toBeTruthy();
-  expect(renderer.root.findByProps({testID: 'calendar-entry-development-calendar-seed'}))
-    .toBeTruthy();
+  expect(renderer.root.findByProps({ testID: 'calendar-screen' })).toBeTruthy();
+  expect(
+    renderer.root.findByProps({
+      testID: 'calendar-entry-development-calendar-seed',
+    }),
+  ).toBeTruthy();
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'root-tab-orders'}).props.onPress();
+    renderer.root.findByProps({ testID: 'root-tab-orders' }).props.onPress();
   });
-  expect(renderer.root.findByProps({testID: 'manual-orders-empty'})).toBeTruthy();
+  expect(
+    renderer.root.findByProps({ testID: 'manual-orders-empty' }),
+  ).toBeTruthy();
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'manual-orders-add-button'}).props.onPress();
+    renderer.root
+      .findByProps({ testID: 'manual-orders-add-button' })
+      .props.onPress();
   });
   for (const [testID, value] of [
     ['manual-order-customer-input', 'Ivan'],
@@ -101,25 +126,35 @@ test('development composition exercises OTP and authenticated UI without exposin
     ['manual-order-address-input', 'Nevsky 25'],
   ]) {
     await ReactTestRenderer.act(async () => {
-      renderer.root.findByProps({testID}).props.onChangeText(value);
+      renderer.root.findByProps({ testID }).props.onChangeText(value);
     });
   }
   await ReactTestRenderer.act(async () => {
-    await renderer.root.findByProps({testID: 'manual-order-save-button'}).props.onPress();
+    await renderer.root
+      .findByProps({ testID: 'manual-order-save-button' })
+      .props.onPress();
   });
-  expect(renderer.root.findByProps({testID: 'manual-order-development-manual-order-1'})).toBeTruthy();
+  expect(
+    renderer.root.findByProps({
+      testID: 'manual-order-development-manual-order-1',
+    }),
+  ).toBeTruthy();
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'manual-order-development-manual-order-1'}).props.onPress();
+    renderer.root
+      .findByProps({ testID: 'manual-order-development-manual-order-1' })
+      .props.onPress();
   });
-  expect(renderer.root.findByProps({testID: 'manual-order-details-loaded'})).toBeTruthy();
+  expect(
+    renderer.root.findByProps({ testID: 'manual-order-details-loaded' }),
+  ).toBeTruthy();
 
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'root-tab-profile'}).props.onPress();
+    renderer.root.findByProps({ testID: 'root-tab-profile' }).props.onPress();
   });
-  expect(renderer.root.findByProps({testID: 'profile-screen'})).toBeTruthy();
+  expect(renderer.root.findByProps({ testID: 'profile-screen' })).toBeTruthy();
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({testID: 'logout-button'}).props.onPress();
+    renderer.root.findByProps({ testID: 'logout-button' }).props.onPress();
   });
-  expect(renderer.root.findByProps({testID: 'login-screen'})).toBeTruthy();
+  expect(renderer.root.findByProps({ testID: 'login-screen' })).toBeTruthy();
 });

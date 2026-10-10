@@ -1,9 +1,14 @@
 import type { User } from '../../../domain/auth/entities/User';
 import type { ProviderCredential } from '../ProviderCredential';
-import type { AuthApi } from '../ports/AuthApi';
+import type {
+  SessionApi,
+  QleanfeelSessionCredentials,
+} from '../ports/SessionApi';
 import type { AuthProviderAdapter } from '../ports/AuthProviderAdapter';
+import type { SecureTokenStore } from '../ports/SecureTokenStore';
 import type { AuthState } from '../AuthState';
 import { AuthStateController } from '../AuthStateController';
+import { SessionManager } from '../SessionManager';
 
 const user: User = {
   id: 'qleanfeel-user-1',
@@ -18,15 +23,32 @@ function createController() {
   const provider: jest.Mocked<AuthProviderAdapter> = {
     requestOtp: jest.fn().mockResolvedValue(undefined),
     verifyOtp: jest.fn().mockResolvedValue(providerCredential),
-    restoreSession: jest.fn().mockResolvedValue(null),
     signOut: jest.fn().mockResolvedValue(undefined),
   };
-  const api: jest.Mocked<AuthApi> = {
-    bootstrap: jest.fn().mockResolvedValue(user),
-    getCurrentUser: jest.fn().mockResolvedValue(user),
+  const credentials: QleanfeelSessionCredentials = {
+    user,
+    accessToken: 'test-access-token',
+    refreshToken: 'test-refresh-token',
   };
+  const api: jest.Mocked<SessionApi> = {
+    bootstrap: jest.fn().mockResolvedValue(credentials),
+    refresh: jest.fn().mockResolvedValue(credentials),
+    logout: jest.fn().mockResolvedValue(undefined),
+  };
+  const tokenStore: jest.Mocked<SecureTokenStore> = {
+    getRefreshToken: jest.fn().mockResolvedValue(null),
+    setRefreshToken: jest.fn().mockResolvedValue(undefined),
+    deleteRefreshToken: jest.fn().mockResolvedValue(undefined),
+  };
+  const session = new SessionManager(api, tokenStore);
 
-  return { controller: new AuthStateController(provider, api), provider, api };
+  return {
+    controller: new AuthStateController(provider, session),
+    provider,
+    api,
+    tokenStore,
+    session,
+  };
 }
 
 describe('AuthStateController', () => {
@@ -101,12 +123,15 @@ describe('AuthStateController', () => {
   });
 
   it('authenticates through the provider and then the Qleanfeel API', async () => {
-    const { controller, provider, api } = createController();
+    const { controller, provider, api, tokenStore } = createController();
 
     await controller.verifyOtp('+10000000000', '123456');
 
     expect(provider.verifyOtp).toHaveBeenCalledWith('+10000000000', '123456');
     expect(api.bootstrap).toHaveBeenCalledWith(providerCredential);
+    expect(tokenStore.setRefreshToken).toHaveBeenCalledWith(
+      'test-refresh-token',
+    );
     expect(controller.state).toEqual({ status: 'authenticated', user });
   });
 
@@ -122,31 +147,35 @@ describe('AuthStateController', () => {
 
     await controller.verifyOtp('+10000000000', '123456');
 
-    expect(controller.state).toEqual({ status: 'error', error: { code: 'NetworkError' } });
+    expect(controller.state).toEqual({
+      status: 'error',
+      error: { code: 'NetworkError' },
+    });
     expect(controller.state.status).not.toBe('authenticated');
-    expect(JSON.stringify(controller.state)).not.toContain('private bootstrap response details');
+    expect(JSON.stringify(controller.state)).not.toContain(
+      'private bootstrap response details',
+    );
     expect(JSON.stringify(states)).not.toContain(providerCredential);
   });
 
-  it('maps current-user API rejection during restoration without exposing details or credentials', async () => {
-    const { controller, provider, api } = createController();
+  it('maps refresh rejection during restoration without exposing details or credentials', async () => {
+    const { controller, api, tokenStore } = createController();
     const states: AuthState[] = [];
     controller.subscribe(state => states.push(state));
-    provider.restoreSession.mockResolvedValue(providerCredential);
-    api.getCurrentUser.mockRejectedValue({
-      code: 'AuthenticationRequired',
-      message: 'private current-user response details',
+    tokenStore.getRefreshToken.mockResolvedValue('old-refresh-token');
+    api.refresh.mockRejectedValue({
+      code: 'Unauthorized',
+      message: 'private refresh response details',
       credential: providerCredential,
     });
 
     await controller.initialize();
 
-    expect(controller.state).toEqual({
-      status: 'error',
-      error: { code: 'AuthenticationRequired' },
-    });
+    expect(controller.state).toEqual({ status: 'sessionExpired' });
     expect(controller.state.status).not.toBe('authenticated');
-    expect(JSON.stringify(controller.state)).not.toContain('private current-user response details');
+    expect(JSON.stringify(controller.state)).not.toContain(
+      'private refresh response details',
+    );
     expect(JSON.stringify(states)).not.toContain(providerCredential);
   });
 
@@ -164,14 +193,18 @@ describe('AuthStateController', () => {
     const { controller, api } = createController();
     const states: AuthState[] = [];
     controller.subscribe(state => states.push(state));
-    let resolveBootstrap: (value: User | PromiseLike<User>) => void = () => {};
+    let resolveBootstrap: (
+      value:
+        | QleanfeelSessionCredentials
+        | PromiseLike<QleanfeelSessionCredentials>,
+    ) => void = () => {};
     let markBootstrapStarted: () => void = () => {};
     const bootstrapStarted = new Promise<void>(resolve => {
       markBootstrapStarted = resolve;
     });
     api.bootstrap.mockImplementation(
       () =>
-        new Promise<User>(resolve => {
+        new Promise<QleanfeelSessionCredentials>(resolve => {
           resolveBootstrap = resolve;
           markBootstrapStarted();
         }),
@@ -182,7 +215,11 @@ describe('AuthStateController', () => {
     await controller.logout();
     expect(controller.state).toEqual({ status: 'unauthenticated' });
 
-    resolveBootstrap(user);
+    resolveBootstrap({
+      user,
+      accessToken: 'race-access',
+      refreshToken: 'race-refresh',
+    });
     await authentication;
 
     expect(controller.state).toEqual({ status: 'unauthenticated' });
@@ -206,8 +243,13 @@ describe('AuthStateController', () => {
 
     await controller.logout();
 
-    expect(controller.state).toEqual({ status: 'error', error: { code: 'NetworkError' } });
-    expect(JSON.stringify(controller.state)).not.toContain('private provider sign-out details');
+    expect(controller.state).toEqual({
+      status: 'error',
+      error: { code: 'NetworkError' },
+    });
+    expect(JSON.stringify(controller.state)).not.toContain(
+      'private provider sign-out details',
+    );
     expect(JSON.stringify(states)).not.toContain(providerCredential);
   });
 
@@ -223,14 +265,18 @@ describe('AuthStateController', () => {
     const { controller, api } = createController();
     const states: AuthState[] = [];
     controller.subscribe(state => states.push(state));
-    let resolveBootstrap: (value: User | PromiseLike<User>) => void = () => {};
+    let resolveBootstrap: (
+      value:
+        | QleanfeelSessionCredentials
+        | PromiseLike<QleanfeelSessionCredentials>,
+    ) => void = () => {};
     let markBootstrapStarted: () => void = () => {};
     const bootstrapStarted = new Promise<void>(resolve => {
       markBootstrapStarted = resolve;
     });
     api.bootstrap.mockImplementation(
       () =>
-        new Promise<User>(resolve => {
+        new Promise<QleanfeelSessionCredentials>(resolve => {
           resolveBootstrap = resolve;
           markBootstrapStarted();
         }),
@@ -239,7 +285,11 @@ describe('AuthStateController', () => {
     const authentication = controller.verifyOtp('+10000000000', '123456');
     await bootstrapStarted;
     controller.expireSession();
-    resolveBootstrap(user);
+    resolveBootstrap({
+      user,
+      accessToken: 'race-access',
+      refreshToken: 'race-refresh',
+    });
     await authentication;
 
     expect(controller.state).toEqual({ status: 'sessionExpired' });
@@ -266,23 +316,26 @@ describe('AuthStateController', () => {
     expect(JSON.stringify(controller.state)).not.toContain(providerCredential);
   });
 
-  it('restores to unauthenticated when there is no provider session', async () => {
-    const { controller, provider, api } = createController();
+  it('restores to unauthenticated when no Qleanfeel refresh token is stored', async () => {
+    const { controller, tokenStore, api } = createController();
 
     await controller.initialize();
 
-    expect(provider.restoreSession).toHaveBeenCalledTimes(1);
-    expect(api.getCurrentUser).not.toHaveBeenCalled();
+    expect(tokenStore.getRefreshToken).toHaveBeenCalledTimes(1);
+    expect(api.refresh).not.toHaveBeenCalled();
     expect(controller.state).toEqual({ status: 'unauthenticated' });
   });
 
-  it('restores provider state through the API to the current Qleanfeel User', async () => {
-    const { controller, provider, api } = createController();
-    provider.restoreSession.mockResolvedValue(providerCredential);
+  it('restores a Qleanfeel session by rotating the securely stored refresh token', async () => {
+    const { controller, api, tokenStore } = createController();
+    tokenStore.getRefreshToken.mockResolvedValue('persisted-refresh-token');
 
     await controller.initialize();
 
-    expect(api.getCurrentUser).toHaveBeenCalledWith(providerCredential);
+    expect(api.refresh).toHaveBeenCalledWith('persisted-refresh-token');
+    expect(tokenStore.setRefreshToken).toHaveBeenCalledWith(
+      'test-refresh-token',
+    );
     expect(controller.state).toEqual({ status: 'authenticated', user });
   });
 
@@ -294,7 +347,11 @@ describe('AuthStateController', () => {
     await controller.verifyOtp('+10000000000', '123456');
 
     expect(controller.state).toEqual({ status: 'authenticated', user });
-    expect(states.every(state => !JSON.stringify(state)?.includes(providerCredential))).toBe(true);
+    expect(
+      states.every(
+        state => !JSON.stringify(state)?.includes(providerCredential),
+      ),
+    ).toBe(true);
     expect(JSON.stringify(controller.state)).not.toContain(providerCredential);
     expect(JSON.stringify(user)).not.toContain(providerCredential);
     expect(controller.state.status).toBe('authenticated');

@@ -1,4 +1,5 @@
 import type { AccessTokenProvider } from '../../application/auth/ports/AccessTokenProvider';
+import { SessionFailure } from '../../application/auth/SessionFailure';
 import { HttpError } from './HttpError';
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -8,6 +9,8 @@ export interface HttpRequest {
   readonly path: string;
   readonly body?: unknown;
   readonly authenticated?: boolean;
+  /** Explicit access token for the protected session logout operation only. */
+  readonly bearerToken?: string;
 }
 
 export interface HttpResponse {
@@ -46,6 +49,7 @@ export class HttpTransport {
       body = JSON.stringify(request.body);
     }
 
+    let accessToken = request.bearerToken;
     if (request.authenticated) {
       let token: string | null | undefined;
       try {
@@ -53,20 +57,33 @@ export class HttpTransport {
       } catch {
         throw new HttpError('UnexpectedResponse');
       }
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
+      accessToken = token ?? undefined;
+      if (!accessToken) throw new SessionFailure('AuthenticationRequired');
     }
 
-    let response: HttpResponse;
-    try {
-      response = await this.fetchImplementation(`${this.options.baseUrl}${request.path}`, {
-        method: request.method,
-        headers,
-        ...(body === undefined ? {} : { body }),
-      });
-    } catch {
-      throw new HttpError('NetworkError');
+    let response = await this.send(request, headers, body, accessToken);
+    if (
+      response.status === 401 &&
+      request.authenticated &&
+      accessToken &&
+      this.options.accessTokenProvider?.refreshAccessToken
+    ) {
+      try {
+        const refreshedToken =
+          await this.options.accessTokenProvider.refreshAccessToken(
+            accessToken,
+          );
+        response = await this.send(request, headers, body, refreshedToken);
+        if (response.status === 401) {
+          await this.options.accessTokenProvider.expireAfterUnauthorized?.(
+            refreshedToken,
+          );
+        }
+      } catch (error) {
+        if (error instanceof HttpError || error instanceof SessionFailure)
+          throw error;
+        throw new HttpError('UnexpectedResponse');
+      }
     }
 
     if (response.status < 200 || response.status >= 300) {
@@ -83,9 +100,33 @@ export class HttpTransport {
       throw new HttpError('UnexpectedResponse');
     }
   }
+
+  private async send(
+    request: HttpRequest,
+    originalHeaders: Record<string, string>,
+    body: string | undefined,
+    accessToken?: string,
+  ): Promise<HttpResponse> {
+    const headers = { ...originalHeaders };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    try {
+      return await this.fetchImplementation(
+        `${this.options.baseUrl}${request.path}`,
+        {
+          method: request.method,
+          headers,
+          ...(body === undefined ? {} : { body }),
+        },
+      );
+    } catch {
+      throw new HttpError('NetworkError');
+    }
+  }
 }
 
-function statusToCode(status: number): ConstructorParameters<typeof HttpError>[0] {
+function statusToCode(
+  status: number,
+): ConstructorParameters<typeof HttpError>[0] {
   switch (status) {
     case 400:
       return 'BadRequest';

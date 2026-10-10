@@ -24,9 +24,15 @@ const errorMessages: Record<AuthErrorCode, string> = {
   CodeExpired: 'That code has expired. Request a new one.',
   TooManyAttempts: 'Too many attempts. Please try again later.',
   TooManyRequests: 'Too many requests. Please try again later.',
-  NetworkError: 'A network error occurred. Check your connection and try again.',
+  NetworkError:
+    'A network error occurred. Check your connection and try again.',
   AuthenticationRequired: 'Please sign in to continue.',
   SessionExpired: 'Your session has expired. Please sign in again.',
+  SecureStorageError:
+    'Secure sign-in storage is unavailable. Please try again.',
+  LogoutIncomplete:
+    'Sign-out could not clear all local credentials. Please try again.',
+  AccountUnavailable: 'This account is not available.',
   UnknownAuthError: 'We could not sign you in. Please try again.',
 };
 
@@ -35,7 +41,9 @@ export function LoginScreen({
   authState: controlledAuthState,
   isVisible = true,
 }: LoginScreenProps): React.JSX.Element {
-  const [localAuthState, setLocalAuthState] = useState<AuthState>(controller.state);
+  const [localAuthState, setLocalAuthState] = useState<AuthState>(
+    controller.state,
+  );
   const [phoneNumber, setPhoneNumber] = useState('');
   const [code, setCode] = useState('');
   const [otpRequested, setOtpRequested] = useState(false);
@@ -51,14 +59,15 @@ export function LoginScreen({
     return unsubscribe;
   }, [controller, controlledAuthState]);
 
-  const isBusy = authState.status === 'unknown' || authState.status === 'authenticating';
+  const isBusy =
+    authState.status === 'unknown' || authState.status === 'authenticating';
   const showCodeInput = otpRequested || authState.status === 'awaitingOtp';
   const errorCode =
     authState.status === 'error'
       ? authState.error.code
       : authState.status === 'sessionExpired'
-        ? 'SessionExpired'
-        : undefined;
+      ? 'SessionExpired'
+      : undefined;
 
   const requestOtp = async (): Promise<void> => {
     await controller.requestOtp(phoneNumber.trim());
@@ -73,14 +82,20 @@ export function LoginScreen({
 
   if (authState.status === 'authenticated') {
     return (
-      <View style={[styles.container, !isVisible && styles.hidden]} testID="login-authenticated">
+      <View
+        style={[styles.container, !isVisible && styles.hidden]}
+        testID="login-authenticated"
+      >
         <Text style={styles.title}>You’re signed in</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, !isVisible && styles.hidden]} testID="login-screen">
+    <View
+      style={[styles.container, !isVisible && styles.hidden]}
+      testID="login-screen"
+    >
       <Text style={styles.title}>Sign in to Qleanfeel</Text>
       <TextInput
         accessibilityLabel="Phone number"
@@ -111,12 +126,20 @@ export function LoginScreen({
       {isBusy ? (
         <View style={styles.progress} testID="auth-progress">
           <ActivityIndicator />
-          <Text>{authState.status === 'unknown' ? 'Checking sign-in…' : 'Please wait…'}</Text>
+          <Text>
+            {authState.status === 'unknown'
+              ? 'Checking sign-in…'
+              : 'Please wait…'}
+          </Text>
         </View>
       ) : null}
 
       {errorCode ? (
-        <Text accessibilityRole="alert" style={styles.error} testID="auth-error">
+        <Text
+          accessibilityRole="alert"
+          style={styles.error}
+          testID="auth-error"
+        >
           {errorMessages[errorCode]}
         </Text>
       ) : null}
@@ -129,7 +152,8 @@ export function LoginScreen({
             requestOtp().catch(() => undefined);
           }}
           style={styles.button}
-          testID="request-otp-button">
+          testID="request-otp-button"
+        >
           <Text style={styles.buttonText}>Request code</Text>
         </Pressable>
       ) : (
@@ -140,7 +164,8 @@ export function LoginScreen({
             verifyOtp().catch(() => undefined);
           }}
           style={styles.button}
-          testID="verify-otp-button">
+          testID="verify-otp-button"
+        >
           <Text style={styles.buttonText}>Verify code</Text>
         </Pressable>
       )}

@@ -31,7 +31,7 @@ M7-B.1 through M7-B.8 are implemented and merged to `main`. ADR-018 through ADR-
 
 - [ADR-025 — Mobile ↔ Backend Integration](ADR-025-mobile-backend-integration.md): approved first Android-to-PostgreSQL vertical slice, provider-independent mobile boundaries, Firebase Phone Authentication as the preferred candidate pending prerequisite verification, Session Manager, native secure refresh-token storage, authenticated Orders reads, refresh limitations, test environment, and acceptance criteria.
 
-M8 architecture is approved; implementation has not started. M8-B Session Foundation, M8-C Orders Read Integration, and M8-D End-to-End Acceptance are provisional proposed slices, not completed milestones. Reports are deferred without an assigned milestone number. ADR-025 does not claim that Firebase or VPS configuration exists.
+M8 architecture is approved. M8-B.1 Session Foundation has an implementation on a feature branch awaiting review; it is not merged and does not complete M8-B. Firebase mobile integration, M8-C Orders Read Integration, and M8-D End-to-End Acceptance remain incomplete. Reports are deferred without an assigned milestone number. ADR-025 does not claim that Firebase or VPS configuration exists.
 
 ## ADR-001 — React Native as the mobile application framework
 

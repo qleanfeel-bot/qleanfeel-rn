@@ -1,21 +1,27 @@
 import type { AuthError } from '../../domain/auth/errors/AuthError';
-import type { AuthApi } from './ports/AuthApi';
 import type { AuthProviderAdapter } from './ports/AuthProviderAdapter';
 import type { AuthState } from './AuthState';
+import type { SessionManager } from './SessionManager';
 
 const initialState: AuthState = { status: 'unknown' };
 type AuthStateListener = (state: AuthState) => void;
 
-function sameUser(left: AuthenticatedState['user'], right: AuthenticatedState['user']): boolean {
+function sameUser(
+  left: AuthenticatedState['user'],
+  right: AuthenticatedState['user'],
+): boolean {
   return (
     left.id === right.id &&
     left.status === right.status &&
     left.createdAt.getTime() === right.createdAt.getTime() &&
-    left.updatedAt.getTime() === right.updatedAt.getTime()
+    left.updatedAt?.getTime() === right.updatedAt?.getTime()
   );
 }
 
-type AuthenticatedState = Extract<AuthState, { readonly status: 'authenticated' }>;
+type AuthenticatedState = Extract<
+  AuthState,
+  { readonly status: 'authenticated' }
+>;
 
 function sameState(left: AuthState, right: AuthState): boolean {
   if (left.status !== right.status) {
@@ -30,7 +36,9 @@ function sameState(left: AuthState, right: AuthState): boolean {
     case 'sessionExpired':
       return true;
     case 'authenticated':
-      return right.status === 'authenticated' && sameUser(left.user, right.user);
+      return (
+        right.status === 'authenticated' && sameUser(left.user, right.user)
+      );
     case 'error':
       return right.status === 'error' && left.error.code === right.error.code;
   }
@@ -50,6 +58,9 @@ function toAuthError(error: unknown): AuthError {
     case 'NetworkError':
     case 'AuthenticationRequired':
     case 'SessionExpired':
+    case 'SecureStorageError':
+    case 'LogoutIncomplete':
+    case 'AccountUnavailable':
     case 'UnknownAuthError':
       return { code };
     default:
@@ -62,11 +73,23 @@ export class AuthStateController {
   private currentState: AuthState = initialState;
   private operationVersion = 0;
   private readonly listeners = new Set<AuthStateListener>();
+  private readonly unsubscribeSessionExpiration: () => void;
 
   constructor(
     private readonly provider: AuthProviderAdapter,
-    private readonly api: AuthApi,
-  ) {}
+    private readonly session: SessionManager,
+  ) {
+    this.unsubscribeSessionExpiration = this.session.subscribeToExpiration(
+      code => {
+        this.beginOperation();
+        if (code !== 'SessionExpired') {
+          this.setState({ status: 'error', error: { code } });
+        } else {
+          this.setState({ status: 'sessionExpired' });
+        }
+      },
+    );
+  }
 
   get state(): AuthState {
     return this.currentState;
@@ -81,23 +104,23 @@ export class AuthStateController {
     };
   }
 
+  dispose(): void {
+    this.unsubscribeSessionExpiration();
+    this.listeners.clear();
+  }
+
   async initialize(): Promise<void> {
     const operationVersion = this.beginOperation();
     this.setState({ status: 'authenticating' });
 
     try {
-      const providerCredential = await this.provider.restoreSession();
+      const user = await this.session.restoreSession();
       if (!this.isCurrentOperation(operationVersion)) {
         return;
       }
 
-      if (providerCredential === null) {
+      if (user === null) {
         this.setState({ status: 'unauthenticated' });
-        return;
-      }
-
-      const user = await this.api.getCurrentUser(providerCredential);
-      if (!this.isCurrentOperation(operationVersion)) {
         return;
       }
 
@@ -130,12 +153,15 @@ export class AuthStateController {
     this.setState({ status: 'authenticating' });
 
     try {
-      const providerCredential = await this.provider.verifyOtp(phoneNumber, code);
+      const providerCredential = await this.provider.verifyOtp(
+        phoneNumber,
+        code,
+      );
       if (!this.isCurrentOperation(operationVersion)) {
         return;
       }
 
-      const user = await this.api.bootstrap(providerCredential);
+      const user = await this.session.bootstrap(providerCredential);
       if (!this.isCurrentOperation(operationVersion)) {
         return;
       }
@@ -150,22 +176,27 @@ export class AuthStateController {
 
   async logout(): Promise<void> {
     const operationVersion = this.beginOperation();
+    this.setState({ status: 'authenticating' });
 
+    let logoutFailure: unknown;
+    try {
+      await this.session.logout();
+    } catch (error) {
+      logoutFailure = error;
+    }
     try {
       await this.provider.signOut();
-      if (this.isCurrentOperation(operationVersion)) {
-        this.setState({ status: 'unauthenticated' });
-      }
     } catch (error) {
-      if (this.isCurrentOperation(operationVersion)) {
-        this.setFailure(error);
-      }
+      logoutFailure ??= error;
+    }
+    if (this.isCurrentOperation(operationVersion)) {
+      if (logoutFailure) this.setFailure(logoutFailure);
+      else this.setState({ status: 'unauthenticated' });
     }
   }
 
   expireSession(): void {
-    this.beginOperation();
-    this.setState({ status: 'sessionExpired' });
+    this.session.expire();
   }
 
   private beginOperation(): number {
